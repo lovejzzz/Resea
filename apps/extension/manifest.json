@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Resea Research Capture",
+  "version": "0.9.0",
+  "description": "Capture the active page as inert research evidence for a local Resea project.",
+  "permissions": ["activeTab", "scripting", "storage", "sidePanel"],
+  "optional_host_permissions": ["https://*/*"],
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "side-panel.html"
+  },
+  "action": {
+    "default_title": "Open Resea capture"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'"
+  }
+}
