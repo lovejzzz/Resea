@@ -1,209 +1,172 @@
 import JSZip from "jszip";
+import {
+  buildTextArtifacts,
+  evaluateOutputQuality,
+  OUTPUT_RENDERER_VERSION,
+  renderAcademicPackage,
+  renderAlignmentCsv,
+} from "./artifacts";
+import { runAudit } from "./audit";
 import type { ProjectState } from "./types";
-import { alignmentMetrics, auditSummary, runAudit } from "./audit";
-import { csvCell, downloadBlob, formatDate, sha256 } from "./utils";
+import { downloadBlob, sha256 } from "./utils";
+
+export { renderAlignmentCsv };
+export const renderMarkdown = renderAcademicPackage;
 
 const MAX_IMPORT_BYTES = 1024 * 1024 * 1024;
 const MAX_ARCHIVE_ENTRIES = 10_000;
 const MAX_PROJECT_JSON_CHARACTERS = 100 * 1024 * 1024;
+const EXPORT_SCHEMA_VERSION = "1.1.0";
 
-function courseOutcomeText(project: ProjectState, outcomeId: string) {
-  const outcome = project.outcomes.find((item) => item.id === outcomeId);
-  return outcome
-    ? `${outcome.code}: ${outcome.action} ${outcome.object}`
-    : "Unknown outcome";
+const safeFileName = (project: ProjectState) =>
+  project.spec.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || "resea-course";
+
+const canonicalProject = (project: ProjectState): ProjectState => ({
+  ...project,
+  findings: runAudit(project),
+});
+
+async function createJsonExport(project: ProjectState, exportedAt: string) {
+  const canonical = canonicalProject(project);
+  const canonicalJson = JSON.stringify(canonical, null, 2);
+  return JSON.stringify(
+    {
+      exportSchemaVersion: EXPORT_SCHEMA_VERSION,
+      exportedAt,
+      renderer: {
+        id: "resea-deterministic-academic-package",
+        version: OUTPUT_RENDERER_VERSION,
+        profile: "academic_clean",
+        citationStyle: "simple-linked-source-note",
+      },
+      quality: evaluateOutputQuality(project, exportedAt),
+      canonicalProjectSha256: await sha256(canonicalJson),
+      project: canonical,
+    },
+    null,
+    2,
+  );
 }
 
-export function renderMarkdown(project: ProjectState) {
-  const findings = runAudit(project);
-  const metrics = alignmentMetrics(project);
-  const lines = [
-    "---",
-    `title: "${project.spec.title.replaceAll('"', '\\"')}"`,
-    `schema_version: "${project.schemaVersion}"`,
-    `project_id: "${project.id}"`,
-    `generated_at: "${new Date().toISOString()}"`,
-    "citation_style: simple-linked-source-note",
-    "---",
-    "",
-    `# ${project.spec.title}`,
-    "",
-    `**Subject:** ${project.spec.subject}  `,
-    `**Level and role:** ${project.spec.academicLevel}; ${project.spec.courseRole}  `,
-    `**Duration:** ${project.spec.weeks} weeks; ${project.spec.sessionsPerWeek} × ${project.spec.minutesPerSession}-minute sessions weekly  `,
-    `**Modality:** ${project.spec.modality}  `,
-    `**Risk tier:** ${project.spec.riskTier.replace("_", " ")}`,
-    "",
-    "## Course rationale and learners",
-    "",
-    project.spec.learnerProfile,
-    "",
-    `**Prior knowledge:** ${project.spec.priorKnowledge}`,
-    "",
-    `**Prerequisites:** ${project.spec.prerequisites}`,
-    "",
-    "## Learning outcomes",
-    "",
-    ...project.outcomes.flatMap((outcome) => [
-      `### ${outcome.code}`,
-      "",
-      `${outcome.conditions}, students will **${outcome.action.toLowerCase()} ${outcome.object}**. Success requires: ${outcome.criteria}.`,
-      "",
-    ]),
-    "## Term design",
-    "",
-    ...project.modules.flatMap((module) => [
-      `### ${module.order}. ${module.title}`,
-      "",
-      module.summary,
-      "",
-      `**Mapped outcomes:** ${module.outcomeIds.map((id) => courseOutcomeText(project, id).split(":")[0]).join(", ") || "None"}`,
-      "",
-      `**Estimated workload:** ${module.estimatedStudentMinutes} minutes`,
-      "",
-      ...(module.activities.length
-        ? [
-            "**Practice and feedback**",
-            "",
-            ...module.activities.map(
-              (activity) =>
-                `- **${activity.title}:** ${activity.instructions} _Feedback: ${activity.feedback}._`,
-            ),
-            "",
-          ]
-        : ["**Practice and feedback:** Not yet designed.", ""]),
-      ...(module.assessments.length
-        ? [
-            "**Assessment**",
-            "",
-            ...module.assessments.map(
-              (assessment) =>
-                `- **${assessment.title} (${assessment.stakes}):** ${assessment.task}`,
-            ),
-            "",
-          ]
-        : []),
-      `**Sources:** ${module.sourceIds
-        .map((id) => {
-          const source = project.sources.find((item) => item.id === id);
-          return source ? `[${source.title}](${source.canonicalUrl})` : "Missing source";
-        })
-        .join("; ") || "None"}`,
-      "",
-    ]),
-    "## Assessment and alignment",
-    "",
-    "| Outcome | Practice | Assessment |",
-    "| --- | --- | --- |",
-    ...project.outcomes.map((outcome) => {
-      const practices = project.modules
-        .flatMap((module) => module.activities)
-        .filter((activity) => activity.outcomeIds.includes(outcome.id))
-        .map((activity) => activity.title)
-        .join("; ");
-      const assessments = project.modules
-        .flatMap((module) => module.assessments)
-        .filter((assessment) => assessment.outcomeIds.includes(outcome.id))
-        .map((assessment) => assessment.title)
-        .join("; ");
-      return `| ${outcome.code}: ${outcome.action} ${outcome.object} | ${practices || "Gap"} | ${assessments || "Gap"} |`;
-    }),
-    "",
-    "## Assumptions register",
-    "",
-    ...project.assumptions.map(
-      (item) =>
-        `- **${item.status.toUpperCase()} · ${item.confidence} confidence:** ${item.statement} _${item.rationale}_ Owner: ${item.owner}.`,
-    ),
-    "",
-    "## Evidence inventory",
-    "",
-    ...project.sources.map(
-      (source, index) =>
-        `${index + 1}. [${source.title}](${source.canonicalUrl}). ${source.authors.join(", ")}. ${source.publisher}. Access: ${source.access}; license: ${source.licenseLabel ?? source.license}. Retrieved ${formatDate(source.lastChecked)}.`,
-    ),
-    "",
-    "## Quality report",
-    "",
-    `- Outcome–assessment coverage: ${metrics.assessmentCoverage}%`,
-    `- Outcome–practice coverage: ${metrics.practiceCoverage}%`,
-    `- Open findings: ${findings.length}`,
-    `- Publication status: ${auditSummary(findings).canPublish ? "No critical blockers" : "Blocked by critical findings"}`,
-    "",
-    ...findings.map(
-      (item) =>
-        `- **${item.severity.toUpperCase()} · ${item.ruleId}: ${item.title}.** ${item.description} Remediation: ${item.remediation}`,
-    ),
-    "",
-    "## Provenance and limitations",
-    "",
-    "This package was assembled from canonical browser-local objects. Public access is not treated as permission to redistribute. Research sufficiency is a documented decision, not a claim of universal internet coverage. All source interpretations and disciplinary judgments require instructor review.",
-  ];
-  return lines.join("\n");
-}
+export async function buildProjectBundle(
+  project: ProjectState,
+  exportedAt = new Date().toISOString(),
+) {
+  const zip = new JSZip();
+  const canonical = canonicalProject(project);
+  const projectJson = JSON.stringify(canonical, null, 2);
+  const textArtifacts = buildTextArtifacts(project, exportedAt);
+  textArtifacts["metadata/renderer-manifest.json"] = JSON.stringify(
+    {
+      id: "resea-deterministic-academic-package",
+      version: OUTPUT_RENDERER_VERSION,
+      exportSchemaVersion: EXPORT_SCHEMA_VERSION,
+      generatedAt: exportedAt,
+      profile: "academic_clean",
+      citationStyle: "simple-linked-source-note",
+      studentInstructorSeparation: true,
+      sourceOfTruth: "project.json",
+      artifactPaths: [
+        ...Object.keys(textArtifacts),
+        "metadata/renderer-manifest.json",
+      ].sort(),
+    },
+    null,
+    2,
+  );
 
-export function renderAlignmentCsv(project: ProjectState) {
-  const rows = [["Outcome code", "Outcome", "Concepts", "Activities", "Assessments"]];
-  const activities = project.modules.flatMap((module) => module.activities);
-  const assessments = project.modules.flatMap((module) => module.assessments);
-  for (const outcome of project.outcomes) {
-    rows.push([
-      outcome.code,
-      `${outcome.action} ${outcome.object}`,
-      outcome.conceptIds
-        .map((id) => project.concepts.find((item) => item.id === id)?.label)
-        .filter(Boolean)
-        .join("; "),
-      activities
-        .filter((item) => item.outcomeIds.includes(outcome.id))
-        .map((item) => item.title)
-        .join("; "),
-      assessments
-        .filter((item) => item.outcomeIds.includes(outcome.id))
-        .map((item) => item.title)
-        .join("; "),
-    ]);
+  const checksums: Record<string, string> = {
+    "project.json": await sha256(projectJson),
+  };
+  for (const [path, content] of Object.entries(textArtifacts)) {
+    checksums[`exports/${path}`] = await sha256(content);
   }
-  return rows.map((row) => row.map(csvCell).join(",")).join("\n");
+  const checksumsJson = JSON.stringify(
+    {
+      algorithm: "SHA-256",
+      generatedAt: exportedAt,
+      files: checksums,
+    },
+    null,
+    2,
+  );
+  const quality = evaluateOutputQuality(project, exportedAt);
+  const manifestJson = JSON.stringify(
+    {
+      format: "resea-project",
+      formatVersion: "1.1.0",
+      compatibleProjectSchema: "1.0.0",
+      projectId: project.id,
+      createdAt: exportedAt,
+      projectSha256: checksums["project.json"],
+      rendererVersion: OUTPUT_RENDERER_VERSION,
+      artifactCount: Object.keys(textArtifacts).length,
+      artifactStatus: quality.status,
+      checksumsSha256: await sha256(checksumsJson),
+      exclusions: [
+        "credentials",
+        "model weights",
+        "restricted source content",
+        "browser history",
+      ],
+    },
+    null,
+    2,
+  );
+
+  zip.file("manifest.json", manifestJson);
+  zip.file("project.json", projectJson);
+  zip.file("checksums.json", checksumsJson);
+  zip.file("audits/latest.json", JSON.stringify(runAudit(project), null, 2));
+  for (const [path, content] of Object.entries(textArtifacts)) {
+    zip.file(`exports/${path}`, content);
+  }
+  return zip.generateAsync({
+    type: "blob",
+    compression: "DEFLATE",
+    compressionOptions: { level: 6 },
+  });
 }
 
-export async function exportProject(project: ProjectState, format: "markdown" | "json" | "csv" | "bundle") {
-  const safeName = project.spec.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+export async function exportProject(
+  project: ProjectState,
+  format: "markdown" | "json" | "csv" | "bundle",
+) {
+  const exportedAt = new Date().toISOString();
+  const safeName = safeFileName(project);
   if (format === "markdown") {
-    downloadBlob(`${safeName}.md`, new Blob([renderMarkdown(project)], { type: "text/markdown" }));
+    downloadBlob(
+      `${safeName}-academic-package.md`,
+      new Blob([renderAcademicPackage(project, exportedAt)], {
+        type: "text/markdown",
+      }),
+    );
     return;
   }
   if (format === "json") {
     downloadBlob(
-      `${safeName}.json`,
-      new Blob([JSON.stringify({ ...project, findings: runAudit(project) }, null, 2)], {
+      `${safeName}-canonical.json`,
+      new Blob([await createJsonExport(project, exportedAt)], {
         type: "application/json",
       }),
     );
     return;
   }
   if (format === "csv") {
-    downloadBlob(`${safeName}-alignment.csv`, new Blob([renderAlignmentCsv(project)], { type: "text/csv" }));
+    downloadBlob(
+      `${safeName}-alignment.csv`,
+      new Blob([renderAlignmentCsv(project)], { type: "text/csv" }),
+    );
     return;
   }
-  const zip = new JSZip();
-  const projectJson = JSON.stringify({ ...project, findings: runAudit(project) }, null, 2);
-  const markdown = renderMarkdown(project);
-  const alignment = renderAlignmentCsv(project);
-  zip.file("manifest.json", JSON.stringify({
-    format: "resea-project",
-    formatVersion: "1.0.0",
-    projectId: project.id,
-    createdAt: new Date().toISOString(),
-    projectSha256: await sha256(projectJson),
-    exclusions: ["credentials", "model weights", "restricted source content"],
-  }, null, 2));
-  zip.file("project.json", projectJson);
-  zip.file("exports/course.md", markdown);
-  zip.file("exports/alignment.csv", alignment);
-  zip.file("audits/latest.json", JSON.stringify(runAudit(project), null, 2));
-  const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
-  downloadBlob(`${safeName}.resea`, blob);
+
+  downloadBlob(
+    `${safeName}.resea`,
+    await buildProjectBundle(project, exportedAt),
+  );
 }
 
 export async function importProjectFile(file: File): Promise<ProjectState> {
@@ -237,12 +200,18 @@ export async function importProjectFile(file: File): Promise<ProjectState> {
     const manifest = JSON.parse(await manifestEntry.async("string")) as {
       format?: string;
       formatVersion?: string;
+      compatibleProjectSchema?: string;
       projectId?: string;
       projectSha256?: string;
+      checksumsSha256?: string;
     };
+    const compatibleFormat =
+      manifest.formatVersion === "1.0.0" ||
+      (manifest.formatVersion === "1.1.0" &&
+        manifest.compatibleProjectSchema === "1.0.0");
     if (
       manifest.format !== "resea-project" ||
-      manifest.formatVersion !== "1.0.0" ||
+      !compatibleFormat ||
       !manifest.projectId ||
       !manifest.projectSha256
     ) {
@@ -252,13 +221,56 @@ export async function importProjectFile(file: File): Promise<ProjectState> {
     if ((await sha256(raw)) !== manifest.projectSha256) {
       throw new Error("Bundle integrity check failed.");
     }
+    if (manifest.checksumsSha256) {
+      const checksumsEntry = zip.file("checksums.json");
+      if (!checksumsEntry) {
+        throw new Error("This bundle is missing its artifact checksums.");
+      }
+      const checksumsRaw = await checksumsEntry.async("string");
+      if ((await sha256(checksumsRaw)) !== manifest.checksumsSha256) {
+        throw new Error("Artifact checksum manifest failed verification.");
+      }
+      const checksums = JSON.parse(checksumsRaw) as {
+        algorithm?: string;
+        files?: Record<string, string>;
+      };
+      if (
+        checksums.algorithm !== "SHA-256" ||
+        !checksums.files ||
+        typeof checksums.files !== "object"
+      ) {
+        throw new Error("This bundle has an invalid artifact checksum manifest.");
+      }
+      for (const [path, expectedHash] of Object.entries(checksums.files)) {
+        if (
+          path.startsWith("/") ||
+          path.split("/").some((segment) => segment === "..") ||
+          !/^[a-f0-9]{64}$/.test(expectedHash)
+        ) {
+          throw new Error("This bundle has an invalid artifact checksum entry.");
+        }
+        const artifactEntry = zip.file(path);
+        if (!artifactEntry) {
+          throw new Error(`Bundle artifact is missing: ${path}.`);
+        }
+        const artifactRaw = path === "project.json"
+          ? raw
+          : await artifactEntry.async("string");
+        if ((await sha256(artifactRaw)) !== expectedHash) {
+          throw new Error(`Bundle artifact integrity check failed: ${path}.`);
+        }
+      }
+    }
   } else {
     raw = await file.text();
   }
   if (raw.length > MAX_PROJECT_JSON_CHARACTERS) {
     throw new Error("This project exceeds the 100 MB JSON limit.");
   }
-  const parsed = JSON.parse(raw) as Partial<ProjectState>;
+  const decoded = JSON.parse(raw) as Partial<ProjectState> & {
+    project?: Partial<ProjectState>;
+  };
+  const parsed: Partial<ProjectState> = decoded.project ?? decoded;
   if (
     parsed.schemaVersion !== "1.0.0" ||
     !parsed.id ||

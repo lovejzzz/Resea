@@ -13,6 +13,10 @@ export const sampleProject: ProjectState = {
     id: "spec-1",
     title: "Research Methods for the Social Sciences",
     subject: "Empirical social science research",
+    catalogDescription:
+      "An evidence-centered introduction to designing, evaluating, and communicating empirical social-science research. Students develop researchable questions, justify methods, examine ethics and validity, and produce a transparent research package.",
+    rationale:
+      "Students need more than procedural familiarity with methods: they need to connect questions, evidence, design choices, ethical responsibilities, and warranted claims. The course therefore uses backward design and repeated research decisions rather than a survey of disconnected techniques.",
     academicLevel: "Lower undergraduate",
     courseRole: "Major requirement",
     learnerProfile:
@@ -20,6 +24,8 @@ export const sampleProject: ProjectState = {
     priorKnowledge:
       "College-level reading and writing; basic numeracy; no prior statistics course assumed.",
     prerequisites: "One introductory social science course (recommended)",
+    diagnosticPlan:
+      "In week 1, students annotate a short research claim, interpret a simple data display, and document prior experience with spreadsheets, citation, and research ethics. Results guide optional support without becoming a graded prerequisite test.",
     weeks: 14,
     sessionsPerWeek: 2,
     minutesPerSession: 75,
@@ -29,6 +35,17 @@ export const sampleProject: ProjectState = {
     materialCostMax: 0,
     openOnly: true,
     accessibilityTarget: "WCAG 2.2 AA; accessible document formats",
+    accessibilityStatement:
+      "Course materials are provided in accessible digital formats. Students may use equivalent written, spoken, signed, or visual response pathways when the assessed construct is preserved. Learners should contact the instructor or institutional accessibility office early when another access path is needed.",
+    academicIntegrityPolicy:
+      "Students must distinguish their own reasoning from source material and disclose computational or generative assistance. Fabricated citations, unverifiable results, and undisclosed substitution of a tool for required analysis are not acceptable.",
+    communicationPolicy:
+      "The instructor acknowledges course questions within two working days. Formative work receives feedback before the next related high-stakes task; students may request clarification or an accessible feedback format.",
+    requiredMaterials: [
+      "A modern web browser and word-processing software",
+      "A spreadsheet or equivalent accessible tabular-analysis tool",
+      "Instructor-provided or openly licensed readings linked in each module",
+    ],
     riskTier: "general",
     jurisdiction: "United States higher education",
     reviewState: "approved",
@@ -422,6 +439,8 @@ export const sampleProject: ProjectState = {
       title: "Questions, evidence, and claims",
       summary:
         "Move from broad interests to bounded questions and distinguish observations, evidence, claims, and decisions.",
+      drivingQuestion:
+        "What makes a social-science question researchable, and what can available evidence actually support?",
       outcomeIds: ["outcome-1"],
       conceptIds: ["concept-1"],
       sourceIds: ["source-4"],
@@ -435,6 +454,13 @@ export const sampleProject: ProjectState = {
           outcomeIds: ["outcome-1"],
           estimatedMinutes: 55,
           feedback: "Peer protocol followed by instructor sampling",
+          preparation:
+            "Read the question-quality guide and bring one broad issue that could be narrowed.",
+          successIndicators: [
+            "Names a population, setting, or bounded case",
+            "Can be investigated with available evidence",
+            "Separates the question from a preferred answer",
+          ],
           accessibilityAlternatives: [
             "Written or spoken contribution",
             "Asynchronous critique window",
@@ -442,6 +468,16 @@ export const sampleProject: ProjectState = {
         },
       ],
       assessments: [],
+      misconceptions: [
+        "A broad social problem is already a research question",
+        "A source is evidence for every claim related to its topic",
+      ],
+      connections:
+        "Introduces the claim–evidence distinctions used in every later design, ethics, and analysis decision.",
+      instructorNotes: [
+        "Use low-stakes examples from multiple social-science traditions.",
+        "Do not require students to commit to a final project topic in this module.",
+      ],
       estimatedStudentMinutes: 315,
       reviewState: "approved",
     },
@@ -451,6 +487,8 @@ export const sampleProject: ProjectState = {
       title: "Constructs, measurement, and validity",
       summary:
         "Operationalize constructs, select measures, and identify threats to the interpretations a study can support.",
+      drivingQuestion:
+        "How do definitions and measures shape the claims a study can responsibly make?",
       outcomeIds: ["outcome-2"],
       conceptIds: ["concept-2"],
       sourceIds: ["source-4"],
@@ -464,6 +502,13 @@ export const sampleProject: ProjectState = {
           outcomeIds: ["outcome-2"],
           estimatedMinutes: 70,
           feedback: "Annotated exemplar and instructor conference",
+          preparation:
+            "Review the construct–measure worked example and identify one construct used in a source.",
+          successIndicators: [
+            "Distinguishes a construct from its operational measure",
+            "Identifies included and excluded dimensions",
+            "Connects a validity threat to a proposed interpretation",
+          ],
           accessibilityAlternatives: [
             "Text-first case packet",
             "Screen-reader-ready data table",
@@ -476,9 +521,18 @@ export const sampleProject: ProjectState = {
           title: "Research design memo",
           type: "Analytical memo",
           stakes: "formative",
+          purpose:
+            "Demonstrate that a research question, constructs, sampling approach, and measurement strategy form a coherent and appropriately qualified design.",
           task:
             "Propose and justify a question, construct definitions, sampling approach, and measurement strategy; disclose at least two limitations.",
           outcomeIds: ["outcome-1", "outcome-2"],
+          expectedEvidence: [
+            "A bounded research question",
+            "Operational definitions for central constructs",
+            "A justified sampling and measurement strategy",
+            "At least two material validity limitations",
+            "Traceable support for design claims",
+          ],
           estimatedMinutes: 240,
           gradingMinutesPerStudent: 12,
           rubricCriteria: [
@@ -487,12 +541,33 @@ export const sampleProject: ProjectState = {
             "Evidence-based justification",
             "Limitations and scope",
           ],
+          feedbackStrategy:
+            "Criterion-referenced comments identify one strong design decision, one validity risk, and one required revision before the final package.",
+          collaborationPolicy:
+            "Peer discussion and question testing are permitted; each student submits and defends an independently authored memo.",
+          sourcePolicy:
+            "Cite all borrowed definitions and empirical claims using resolvable source links or course citation guidance.",
           toolPolicy:
             "Generative tools may assist brainstorming; the submitted rationale and source verification must be the student's own.",
+          integrityNotes:
+            "Students retain a brief decision log and must be able to explain every design choice and citation.",
+          alignmentRationale:
+            "The memo directly elicits CLO 1 through a bounded question and CLO 2 through a justified design and measurement strategy under stated constraints.",
+          evaluatorGuidance:
+            "Judge coherence and warranted scope rather than methodological sophistication alone. Do not reward technical vocabulary that is disconnected from the proposed question.",
           accessibilityAlternatives: [
             "Structured written memo or equivalent narrated briefing",
           ],
         },
+      ],
+      misconceptions: [
+        "A familiar measure is automatically valid for a new population",
+        "Reliability alone establishes that a measure captures the intended construct",
+      ],
+      connections:
+        "Builds on bounded questions and prepares students to compare what different research designs can establish.",
+      instructorNotes: [
+        "Offer an accessible text alternative for every visual measurement example.",
       ],
       estimatedStudentMinutes: 410,
       reviewState: "approved",
@@ -503,11 +578,22 @@ export const sampleProject: ProjectState = {
       title: "Design choices and causal reasoning",
       summary:
         "Compare experimental, observational, qualitative, and mixed-methods designs by the claims each can support.",
+      drivingQuestion:
+        "Which design is fit for this question, and where must causal or general claims stop?",
       outcomeIds: ["outcome-2", "outcome-3"],
       conceptIds: ["concept-3"],
       sourceIds: ["source-4"],
       activities: [],
       assessments: [],
+      misconceptions: [
+        "Only experiments produce useful evidence",
+        "A statistically adjusted association is automatically causal",
+      ],
+      connections:
+        "Extends measurement reasoning into design choice and prepares students to assess ethical tradeoffs.",
+      instructorNotes: [
+        "This module intentionally retains a practice gap so the sample audit demonstrates a high-severity finding.",
+      ],
       estimatedStudentMinutes: 360,
       reviewState: "needs_review",
     },
@@ -517,6 +603,8 @@ export const sampleProject: ProjectState = {
       title: "Ethics, power, and responsible inquiry",
       summary:
         "Apply ethical principles while attending to institutional process, community context, power, and data stewardship.",
+      drivingQuestion:
+        "Who bears the risks and receives the benefits of a proposed study, and what changes are ethically required?",
       outcomeIds: ["outcome-3"],
       conceptIds: ["concept-4"],
       sourceIds: ["source-1"],
@@ -530,6 +618,13 @@ export const sampleProject: ProjectState = {
           outcomeIds: ["outcome-3"],
           estimatedMinutes: 75,
           feedback: "Decision memo compared with a multi-perspective exemplar",
+          preparation:
+            "Review the selected Belmont principles excerpt and the institution-specific review-process note.",
+          successIndicators: [
+            "Identifies affected stakeholders and power relationships",
+            "Applies principles without treating them as a checklist",
+            "Distinguishes classroom analysis from institutional approval",
+          ],
           accessibilityAlternatives: [
             "Advance access to cases",
             "Written participation pathway",
@@ -542,9 +637,17 @@ export const sampleProject: ProjectState = {
           title: "Ethics and stakeholder review",
           type: "Case analysis",
           stakes: "summative",
+          purpose:
+            "Evaluate a proposed study through principled, contextual, and stakeholder-aware ethical reasoning without simulating formal institutional approval.",
           task:
             "Evaluate the ethical implications of a proposed study and recommend justified changes without claiming formal institutional approval.",
           outcomeIds: ["outcome-3"],
+          expectedEvidence: [
+            "A multi-perspective stakeholder analysis",
+            "Reasoning tied to relevant ethical principles and context",
+            "Feasible mitigations and their limitations",
+            "Explicit unresolved tensions or information needs",
+          ],
           estimatedMinutes: 180,
           gradingMinutesPerStudent: 14,
           rubricCriteria: [
@@ -553,12 +656,33 @@ export const sampleProject: ProjectState = {
             "Context and scope",
             "Feasible mitigations",
           ],
+          feedbackStrategy:
+            "The evaluator records criterion-level evidence and a short memo distinguishing required ethical revisions from context-dependent judgment.",
+          collaborationPolicy:
+            "Case deliberation may be collaborative; the final recommendation and justification must be individually attributable unless a group submission is explicitly assigned.",
+          sourcePolicy:
+            "Policy or ethical claims must cite the applicable source and jurisdiction; students must not present course analysis as legal or institutional approval.",
           toolPolicy:
             "Sources and any tool assistance must be disclosed; students remain responsible for all policy interpretations.",
+          integrityNotes:
+            "Invented institutional requirements or fabricated stakeholder testimony are prohibited. Uncertainty must remain visible.",
+          alignmentRationale:
+            "The task directly elicits CLO 3 by requiring students to evaluate risks, benefits, consent, power, and equitable treatment using guidance and stakeholder analysis.",
+          evaluatorGuidance:
+            "Reward reasoned attention to context and tensions. Do not score agreement with a single predetermined recommendation when alternatives are defensible.",
           accessibilityAlternatives: [
             "Written, audio, or signed response using the same evidence criteria",
           ],
         },
+      ],
+      misconceptions: [
+        "Ethics approval is a one-time administrative checkbox",
+        "Removing names always makes data harmless or anonymous",
+      ],
+      connections:
+        "Applies earlier questions, measures, and design choices to responsibility and prepares the ethics note in the final package.",
+      instructorNotes: [
+        "Replace generic institutional-process language with the local policy before learner publication.",
       ],
       estimatedStudentMinutes: 380,
       reviewState: "approved",
@@ -569,6 +693,8 @@ export const sampleProject: ProjectState = {
       title: "Analysis, interpretation, and uncertainty",
       summary:
         "Choose bounded analytic approaches, separate result from interpretation, and communicate uncertainty without overstating evidence.",
+      drivingQuestion:
+        "What can this analysis support, what remains uncertain, and could another researcher reproduce the reasoning?",
       outcomeIds: ["outcome-2", "outcome-4"],
       conceptIds: ["concept-3", "concept-5"],
       sourceIds: ["source-2"],
@@ -582,6 +708,13 @@ export const sampleProject: ProjectState = {
           outcomeIds: ["outcome-4"],
           estimatedMinutes: 95,
           feedback: "Peer issue report and self-correction log",
+          preparation:
+            "Complete the file-organization checklist and verify that all shared materials may be distributed.",
+          successIndicators: [
+            "A peer can locate inputs, decisions, and outputs",
+            "Dependencies and transformations are documented",
+            "The revision log resolves or explains peer-reported issues",
+          ],
           accessibilityAlternatives: [
             "Keyboard-operable spreadsheet pathway",
             "Low-bandwidth package download",
@@ -594,9 +727,19 @@ export const sampleProject: ProjectState = {
           title: "Transparent research package",
           type: "Portfolio",
           stakes: "summative",
+          purpose:
+            "Integrate the course outcomes in a bounded research product whose evidence, decisions, limitations, ethics, and reproducibility can be independently reviewed.",
           task:
             "Submit a bounded research product with question, methods rationale, data or evidence inventory, analysis, interpretation, limitations, ethics note, and reproducibility documentation.",
           outcomeIds: ["outcome-1", "outcome-2", "outcome-3", "outcome-4"],
+          expectedEvidence: [
+            "A bounded question and qualified rationale",
+            "A coherent methods and measurement justification",
+            "A source, data, or evidence inventory with reuse conditions",
+            "Reproducible analysis materials and a decision log",
+            "Interpretation separated from observed results",
+            "Limitations, uncertainty, and an ethics note",
+          ],
           estimatedMinutes: 720,
           gradingMinutesPerStudent: 25,
           rubricCriteria: [
@@ -606,13 +749,34 @@ export const sampleProject: ProjectState = {
             "Interpretive restraint",
             "Reproducibility and documentation",
           ],
+          feedbackStrategy:
+            "Students receive a milestone conference, a peer reproducibility report, and criterion-referenced final feedback with a prioritized revision path.",
+          collaborationPolicy:
+            "Peer testing and troubleshooting are expected and must be logged. The submitted reasoning and designated individual work remain attributable.",
+          sourcePolicy:
+            "Every borrowed claim, dataset, instrument, and adapted artifact must have a resolvable citation and a documented access or reuse condition.",
           toolPolicy:
             "All computational and generative assistance must be logged; unverified generated citations or results are prohibited.",
+          integrityNotes:
+            "The package must preserve original data or instructor-approved substitutes, analysis history, and disclosure of assistance. Results may not be fabricated or selectively replaced.",
+          alignmentRationale:
+            "The portfolio elicits all four outcomes through an inspectable chain from question and design to ethics, interpretation, and reproducible documentation.",
+          evaluatorGuidance:
+            "Prioritize traceability, coherence, ethical reasoning, and interpretive restraint. Technical complexity is not a substitute for a defensible evidence chain.",
           accessibilityAlternatives: [
             "Equivalent textual, visual, or narrated presentation layer",
             "Private data alternative supplied by instructor",
           ],
         },
+      ],
+      misconceptions: [
+        "Reproducibility means obtaining the same conclusion rather than reproducing the recorded process",
+        "A polished visualization can compensate for undocumented transformations",
+      ],
+      connections:
+        "Synthesizes every earlier decision into the final research package and makes limitations visible for future revision.",
+      instructorNotes: [
+        "The sample workload intentionally exceeds the weekly budget; split this module across multiple weeks before learner publication.",
       ],
       estimatedStudentMinutes: 825,
       reviewState: "approved",

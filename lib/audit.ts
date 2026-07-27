@@ -171,6 +171,47 @@ export function runAudit(project: ProjectState): AuditFinding[] {
         ),
       );
     }
+    const missingCoreBriefFields = [
+      !assessment.purpose?.trim() ? "purpose" : "",
+      !assessment.expectedEvidence?.length ? "expected evidence" : "",
+      !assessment.alignmentRationale?.trim() ? "alignment rationale" : "",
+      !assessment.rubricCriteria.length ? "rubric criteria" : "",
+    ].filter(Boolean);
+    if (missingCoreBriefFields.length) {
+      findings.push(
+        finding(
+          "ASM-005",
+          "Assessment",
+          "high",
+          `${assessment.title} has an incomplete assessment brief`,
+          `The learner and evaluator package is missing ${missingCoreBriefFields.join(", ")}.`,
+          "Complete the purpose, expected evidence, alignment rationale, and evaluation criteria before learner use.",
+          [assessment.id],
+        ),
+      );
+    }
+    const missingAdministrationFields = [
+      !assessment.feedbackStrategy?.trim() ? "feedback strategy" : "",
+      !assessment.collaborationPolicy?.trim() ? "collaboration policy" : "",
+      !assessment.sourcePolicy?.trim() ? "source/originality policy" : "",
+      !assessment.integrityNotes?.trim() ? "integrity notes" : "",
+      assessment.stakes === "summative" && !assessment.evaluatorGuidance?.trim()
+        ? "evaluator guidance"
+        : "",
+    ].filter(Boolean);
+    if (missingAdministrationFields.length) {
+      findings.push(
+        finding(
+          "ASM-006",
+          "Assessment",
+          "medium",
+          `${assessment.title} needs administration guidance`,
+          `The assessment is missing ${missingAdministrationFields.join(", ")}.`,
+          "Document feedback timing, collaboration, source use, integrity risks, and summative evaluator guidance.",
+          [assessment.id],
+        ),
+      );
+    }
   }
 
   if (hasCycle(project.concepts)) {
@@ -252,6 +293,19 @@ export function runAudit(project: ProjectState): AuditFinding[] {
     project.spec.independentMinutesPerWeek +
     project.spec.sessionsPerWeek * project.spec.minutesPerSession;
   for (const courseModule of project.modules) {
+    if (!courseModule.sourceIds.length) {
+      findings.push(
+        finding(
+          "MOD-002",
+          "Evidence & citations",
+          "high",
+          `${courseModule.title} has no source coverage`,
+          "The module cannot show which research or instructional source supports its required content.",
+          "Map at least one reviewed source or explicitly label the module as instructor-authored content requiring evidence review.",
+          [courseModule.id],
+        ),
+      );
+    }
     if (courseModule.estimatedStudentMinutes > weeklyBudget * 1.35) {
       findings.push(
         finding(

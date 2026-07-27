@@ -20,7 +20,9 @@ The current pilot release includes:
 - deterministic publication audits for citation integrity, alignment, cycles, risk review, licensing, freshness, accessibility, assessment policy, and workload;
 - per-source freshness intervals and user-triggered metadata checks;
 - immutable local version manifests with SHA-256 integrity hashes;
-- Markdown, canonical JSON, alignment CSV, and checksummed `.resea` bundle exports;
+- a deterministic academic-package renderer with explicit learner-release checks;
+- separated student syllabus, instructor guide, module guides, assessment briefs, annotated bibliography, evidence map, schedule, rubrics, freshness report, and quality report;
+- complete Markdown, checksummed canonical JSON, detailed CSV, and SHA-256-verified `.resea` bundle exports;
 - multi-course IndexedDB persistence and switching, a durable-storage request, and offline shell caching;
 - bounded import/restore with schema, archive-path, manifest, project-identity, and checksum validation;
 - organizer-only operation when no local model is installed;
@@ -111,6 +113,12 @@ The included fixture intentionally retains non-critical review findings. A reali
 - PDF, DOCX, and LMS-oriented rendering are not in this pilot. Markdown and JSON are authoritative.
 - Collaboration and centralized administration are out of scope for the zero-backend release.
 - Browser profile storage is not permanent. Export `.resea` bundles after material work.
+
+## Output standard
+
+Output quality precedes file format. Resea does not turn missing academic decisions into plausible prose. Every exported artifact is derived from canonical objects, carries an explicit release status, and marks incomplete fields as instructor completion requirements.
+
+The complete `.resea` package separates learner-facing material from instructor guidance and includes source/evidence traceability, assessment purpose and expected evidence, collaboration and tool policy, workload and grading load, accessibility pathways, output-readiness checks, renderer provenance, and per-file SHA-256 checksums. Rendered files are derivatives; `project.json` remains the source of truth.
 
 ## Responsible use
 

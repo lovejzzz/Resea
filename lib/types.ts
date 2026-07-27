@@ -16,11 +16,14 @@ export interface CourseSpec {
   id: UUID;
   title: string;
   subject: string;
+  catalogDescription?: string;
+  rationale?: string;
   academicLevel: string;
   courseRole: string;
   learnerProfile: string;
   priorKnowledge: string;
   prerequisites: string;
+  diagnosticPlan?: string;
   weeks: number;
   sessionsPerWeek: number;
   minutesPerSession: number;
@@ -30,6 +33,10 @@ export interface CourseSpec {
   materialCostMax: number;
   openOnly: boolean;
   accessibilityTarget: string;
+  accessibilityStatement?: string;
+  academicIntegrityPolicy?: string;
+  communicationPolicy?: string;
+  requiredMaterials?: string[];
   riskTier: RiskTier;
   jurisdiction: string;
   reviewState: ReviewState;
@@ -142,6 +149,8 @@ export interface Activity {
   estimatedMinutes: number;
   feedback: string;
   accessibilityAlternatives: string[];
+  preparation?: string;
+  successIndicators?: string[];
 }
 
 export interface Assessment {
@@ -149,12 +158,20 @@ export interface Assessment {
   title: string;
   type: string;
   stakes: "diagnostic" | "formative" | "summative";
+  purpose?: string;
   task: string;
   outcomeIds: UUID[];
+  expectedEvidence?: string[];
   estimatedMinutes: number;
   gradingMinutesPerStudent: number;
   rubricCriteria: string[];
+  feedbackStrategy?: string;
+  collaborationPolicy?: string;
+  sourcePolicy?: string;
   toolPolicy: string;
+  integrityNotes?: string;
+  alignmentRationale?: string;
+  evaluatorGuidance?: string;
   accessibilityAlternatives: string[];
 }
 
@@ -163,11 +180,15 @@ export interface Module {
   order: number;
   title: string;
   summary: string;
+  drivingQuestion?: string;
   outcomeIds: UUID[];
   conceptIds: UUID[];
   sourceIds: UUID[];
   activities: Activity[];
   assessments: Assessment[];
+  misconceptions?: string[];
+  connections?: string;
+  instructorNotes?: string[];
   estimatedStudentMinutes: number;
   reviewState: ReviewState;
 }

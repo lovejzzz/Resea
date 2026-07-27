@@ -25,6 +25,22 @@ Critical findings block publication. Current critical rules cover missing refere
 
 High findings should be resolved before learner use. Medium and advisory findings remain visible in exports and version records. Passing the gate means “structurally eligible for instructor publication,” not “certified correct.”
 
+## Output quality
+
+Rendered fluency is not allowed to conceal missing decisions. The output gate separately checks brief approval, critical integrity, high-severity findings, assessment-brief completeness, module teachability, learner-facing policies, source rights, freshness, assumptions, and version approval.
+
+Every academic package:
+
+- labels whether it is blocked, requires instructor review, or is ready for learner release;
+- separates student-facing and instructor-facing material;
+- includes assessment purpose, expected evidence, alignment rationale, rubric criteria, feedback, collaboration, source, tool, integrity, access, and evaluator guidance where recorded;
+- retains exact claim–evidence–source relationships in a machine-readable evidence map;
+- includes workload, grading load, schedule, freshness, and unresolved quality decisions;
+- identifies canonical `project.json` as the source of truth;
+- records renderer provenance and SHA-256 checksums for every derivative.
+
+When a required field is absent, the renderer emits an explicit instructor-completion requirement. It does not generate a generic policy, scoring threshold, citation, or disciplinary claim to make the document look finished.
+
 ## Fixture policy
 
 The packaged social-science methods course is evaluation and onboarding data, not production subject logic. It demonstrates:

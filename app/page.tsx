@@ -40,6 +40,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { LucideIcon } from "lucide-react";
+import { evaluateOutputQuality, OUTPUT_RENDERER_VERSION } from "@/lib/artifacts";
 import { alignmentMetrics, auditSummary, runAudit } from "@/lib/audit";
 import { exportProject, importProjectFile } from "@/lib/export";
 import { cloneSample, createBlankProject, createSampleProject } from "@/lib/project";
@@ -153,6 +154,8 @@ function BriefView({
   const required = [
     ["Course title", spec.title && spec.title !== "Untitled course"],
     ["Subject", spec.subject],
+    ["Catalog description", spec.catalogDescription],
+    ["Course rationale", spec.rationale],
     ["Learner profile", spec.learnerProfile],
     ["Prior knowledge", spec.priorKnowledge],
     ["Schedule", spec.weeks > 0 && spec.minutesPerSession > 0],
@@ -216,6 +219,66 @@ function BriefView({
                   <option>Capstone</option>
                   <option>Professional development</option>
                 </select>
+              </label>
+            </div>
+          </section>
+
+          <section className="panel form-panel">
+            <div className="panel-heading"><div><p className="eyebrow">Learner-facing foundation</p><h2>Purpose and policy</h2></div></div>
+            <div className="form-grid">
+              <label className="field">
+                <span>Catalog description <em>Required</em></span>
+                <textarea
+                  rows={3}
+                  value={spec.catalogDescription ?? ""}
+                  placeholder="A concise, student-facing description of the course scope and capabilities."
+                  onChange={(e) => updateSpec({ catalogDescription: e.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span>Course rationale <em>Required</em></span>
+                <textarea
+                  rows={3}
+                  value={spec.rationale ?? ""}
+                  placeholder="Why this course is needed and how its design serves the stated learners."
+                  onChange={(e) => updateSpec({ rationale: e.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span>Entry diagnostic and support plan</span>
+                <textarea
+                  rows={3}
+                  value={spec.diagnosticPlan ?? ""}
+                  placeholder="What will reveal entry needs, and how will support change in response?"
+                  onChange={(e) => updateSpec({ diagnosticPlan: e.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span>Accessibility statement</span>
+                <textarea
+                  rows={3}
+                  value={spec.accessibilityStatement ?? ""}
+                  placeholder="State equivalent access pathways and the applicable institutional process."
+                  onChange={(e) => updateSpec({ accessibilityStatement: e.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span>Academic integrity and tool use</span>
+                <textarea
+                  rows={3}
+                  value={spec.academicIntegrityPolicy ?? ""}
+                  placeholder="Clarify source attribution, originality, assistance disclosure, and prohibited substitution."
+                  onChange={(e) => updateSpec({ academicIntegrityPolicy: e.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span>Communication and feedback expectations</span>
+                <textarea
+                  rows={3}
+                  value={spec.communicationPolicy ?? ""}
+                  placeholder="Set response, feedback, revision, and accessible-format expectations."
+                  onChange={(e) => updateSpec({ communicationPolicy: e.target.value })}
+                />
               </label>
             </div>
           </section>
@@ -786,17 +849,27 @@ function BuildView({
     estimatedMinutes: 30,
     feedback: "Instructor feedback",
     accessibilityAlternative: "",
+    preparation: "",
+    successIndicators: "",
   });
   const [assessmentDraft, setAssessmentDraft] = useState({
     title: "",
     type: "Performance task",
     stakes: "formative" as Assessment["stakes"],
+    purpose: "",
     task: "",
     outcomeId: "",
+    expectedEvidence: "",
     estimatedMinutes: 45,
     gradingMinutesPerStudent: 8,
     rubricCriteria: "",
+    feedbackStrategy: "",
+    collaborationPolicy: "",
+    sourcePolicy: "",
     toolPolicy: "Course tools are optional unless the instructor specifies otherwise.",
+    integrityNotes: "",
+    alignmentRationale: "",
+    evaluatorGuidance: "",
     accessibilityAlternative: "",
   });
   const selectedModuleObject =
@@ -839,6 +912,11 @@ function BuildView({
       accessibilityAlternatives: activityDraft.accessibilityAlternative.trim()
         ? [activityDraft.accessibilityAlternative.trim()]
         : [],
+      preparation: activityDraft.preparation.trim() || undefined,
+      successIndicators: activityDraft.successIndicators
+        .split("\n")
+        .map((item) => item.trim())
+        .filter(Boolean),
     };
     setProject((current) => ({
       ...current,
@@ -881,6 +959,8 @@ function BuildView({
       estimatedMinutes: 30,
       feedback: "Instructor feedback",
       accessibilityAlternative: "",
+      preparation: "",
+      successIndicators: "",
     });
     setEditor(null);
     notify("Activity added; workload and outcome alignment were updated for review.");
@@ -892,10 +972,13 @@ function BuildView({
     if (
       !assessmentDraft.title.trim() ||
       !assessmentDraft.type.trim() ||
+      !assessmentDraft.purpose.trim() ||
       !assessmentDraft.task.trim() ||
+      !assessmentDraft.expectedEvidence.trim() ||
+      !assessmentDraft.alignmentRationale.trim() ||
       !assessmentDraft.rubricCriteria.split(",").some((criterion) => criterion.trim())
     ) {
-      notify("Complete the assessment title, type, task, and at least one rubric criterion.");
+      notify("Complete the assessment purpose, task, expected evidence, alignment rationale, and rubric.");
       return;
     }
     const assessment: Assessment = {
@@ -903,15 +986,26 @@ function BuildView({
       title: assessmentDraft.title.trim(),
       type: assessmentDraft.type.trim(),
       stakes: assessmentDraft.stakes,
+      purpose: assessmentDraft.purpose.trim(),
       task: assessmentDraft.task.trim(),
       outcomeIds: [assessmentDraft.outcomeId],
+      expectedEvidence: assessmentDraft.expectedEvidence
+        .split("\n")
+        .map((item) => item.trim())
+        .filter(Boolean),
       estimatedMinutes: assessmentDraft.estimatedMinutes,
       gradingMinutesPerStudent: assessmentDraft.gradingMinutesPerStudent,
       rubricCriteria: assessmentDraft.rubricCriteria
         .split(",")
         .map((criterion) => criterion.trim())
         .filter(Boolean),
+      feedbackStrategy: assessmentDraft.feedbackStrategy.trim(),
+      collaborationPolicy: assessmentDraft.collaborationPolicy.trim(),
+      sourcePolicy: assessmentDraft.sourcePolicy.trim(),
       toolPolicy: assessmentDraft.toolPolicy.trim(),
+      integrityNotes: assessmentDraft.integrityNotes.trim(),
+      alignmentRationale: assessmentDraft.alignmentRationale.trim(),
+      evaluatorGuidance: assessmentDraft.evaluatorGuidance.trim(),
       accessibilityAlternatives: assessmentDraft.accessibilityAlternative.trim()
         ? [assessmentDraft.accessibilityAlternative.trim()]
         : [],
@@ -955,12 +1049,20 @@ function BuildView({
       title: "",
       type: "Performance task",
       stakes: "formative",
+      purpose: "",
       task: "",
       outcomeId: availableOutcomes[0]?.id ?? "",
+      expectedEvidence: "",
       estimatedMinutes: 45,
       gradingMinutesPerStudent: 8,
       rubricCriteria: "",
+      feedbackStrategy: "",
+      collaborationPolicy: "",
+      sourcePolicy: "",
       toolPolicy: "Course tools are optional unless the instructor specifies otherwise.",
+      integrityNotes: "",
+      alignmentRationale: "",
+      evaluatorGuidance: "",
       accessibilityAlternative: "",
     });
     setEditor(null);
@@ -1004,6 +1106,8 @@ function BuildView({
                     <label className="field"><span>Title</span><input required value={activityDraft.title} onChange={(e) => setActivityDraft({ ...activityDraft, title: e.target.value })} /></label>
                     <label className="field"><span>Activity type</span><input required value={activityDraft.type} onChange={(e) => setActivityDraft({ ...activityDraft, type: e.target.value })} /></label>
                     <label className="field wide"><span>Instructions</span><textarea required rows={3} value={activityDraft.instructions} onChange={(e) => setActivityDraft({ ...activityDraft, instructions: e.target.value })} /></label>
+                    <label className="field"><span>Preparation</span><textarea rows={2} value={activityDraft.preparation} onChange={(e) => setActivityDraft({ ...activityDraft, preparation: e.target.value })} /></label>
+                    <label className="field"><span>Success indicators <small>one per line</small></span><textarea rows={2} value={activityDraft.successIndicators} onChange={(e) => setActivityDraft({ ...activityDraft, successIndicators: e.target.value })} /></label>
                     <label className="field"><span>Mapped outcome</span><select required value={activityDraft.outcomeId} onChange={(e) => setActivityDraft({ ...activityDraft, outcomeId: e.target.value })}><option value="">Select an outcome</option>{availableOutcomes.map((outcome) => <option key={outcome.id} value={outcome.id}>{outcome.code}: {outcome.action} {outcome.object}</option>)}</select></label>
                     <label className="field"><span>Student minutes</span><input required min={1} type="number" value={activityDraft.estimatedMinutes} onChange={(e) => setActivityDraft({ ...activityDraft, estimatedMinutes: Number(e.target.value) })} /></label>
                     <label className="field"><span>Feedback method</span><input required value={activityDraft.feedback} onChange={(e) => setActivityDraft({ ...activityDraft, feedback: e.target.value })} /></label>
@@ -1021,11 +1125,19 @@ function BuildView({
                     <label className="field"><span>Assessment type</span><input required value={assessmentDraft.type} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, type: e.target.value })} /></label>
                     <label className="field"><span>Stakes</span><select value={assessmentDraft.stakes} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, stakes: e.target.value as Assessment["stakes"] })}><option value="diagnostic">Diagnostic</option><option value="formative">Formative</option><option value="summative">Summative</option></select></label>
                     <label className="field"><span>Mapped outcome</span><select required value={assessmentDraft.outcomeId} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, outcomeId: e.target.value })}><option value="">Select an outcome</option>{availableOutcomes.map((outcome) => <option key={outcome.id} value={outcome.id}>{outcome.code}: {outcome.action} {outcome.object}</option>)}</select></label>
+                    <label className="field wide"><span>Purpose <em>Required</em></span><textarea required rows={2} value={assessmentDraft.purpose} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, purpose: e.target.value })} placeholder="What evidence of learning should this assessment establish?" /></label>
                     <label className="field wide"><span>Student task</span><textarea required rows={3} value={assessmentDraft.task} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, task: e.target.value })} /></label>
+                    <label className="field wide"><span>Expected evidence <small>one item per line</small></span><textarea required rows={3} value={assessmentDraft.expectedEvidence} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, expectedEvidence: e.target.value })} /></label>
+                    <label className="field wide"><span>Why this measures the outcome</span><textarea required rows={2} value={assessmentDraft.alignmentRationale} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, alignmentRationale: e.target.value })} /></label>
                     <label className="field"><span>Student minutes</span><input required min={1} type="number" value={assessmentDraft.estimatedMinutes} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, estimatedMinutes: Number(e.target.value) })} /></label>
                     <label className="field"><span>Grading minutes / student</span><input required min={0} type="number" value={assessmentDraft.gradingMinutesPerStudent} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, gradingMinutesPerStudent: Number(e.target.value) })} /></label>
                     <label className="field wide"><span>Rubric criteria</span><input required value={assessmentDraft.rubricCriteria} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, rubricCriteria: e.target.value })} placeholder="Accuracy, evidence use, interpretation" /></label>
+                    <label className="field"><span>Feedback strategy</span><textarea rows={2} value={assessmentDraft.feedbackStrategy} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, feedbackStrategy: e.target.value })} /></label>
+                    <label className="field"><span>Collaboration policy</span><textarea rows={2} value={assessmentDraft.collaborationPolicy} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, collaborationPolicy: e.target.value })} /></label>
+                    <label className="field"><span>Source and originality policy</span><textarea rows={2} value={assessmentDraft.sourcePolicy} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, sourcePolicy: e.target.value })} /></label>
                     <label className="field"><span>Tool policy</span><textarea rows={2} value={assessmentDraft.toolPolicy} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, toolPolicy: e.target.value })} /></label>
+                    <label className="field"><span>Integrity and security notes</span><textarea rows={2} value={assessmentDraft.integrityNotes} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, integrityNotes: e.target.value })} /></label>
+                    <label className="field"><span>Evaluator guidance</span><textarea rows={2} value={assessmentDraft.evaluatorGuidance} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, evaluatorGuidance: e.target.value })} /></label>
                     <label className="field"><span>Accessibility alternative</span><textarea rows={2} value={assessmentDraft.accessibilityAlternative} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, accessibilityAlternative: e.target.value })} /></label>
                   </div>
                   {!availableOutcomes.length ? <div className="inline-notice danger"><AlertTriangle size={16} /><span>This module needs an approved outcome before adding an assessment.</span></div> : null}
@@ -1208,6 +1320,8 @@ function VersionsView({
 }) {
   const findings = runAudit(project);
   const summary = auditSummary(findings);
+  const outputQuality = evaluateOutputQuality(project);
+  const publicationEligible = summary.canPublish && outputQuality.blocked === 0;
   const [approver, setApprover] = useState("Local instructor");
   const [notes, setNotes] = useState("Initial evidence-backed course design.");
   const [publishing, setPublishing] = useState(false);
@@ -1225,6 +1339,8 @@ function VersionsView({
         ...project.modules.map((item) => item.id),
       ],
       ruleSetVersion: "1.0.0",
+      rendererVersion: OUTPUT_RENDERER_VERSION,
+      outputQualityStatus: outputQuality.status,
     };
     const manifestHash = await sha256(JSON.stringify(manifest));
     const versionNumber = project.versions.length + 1;
@@ -1256,19 +1372,42 @@ function VersionsView({
       <SectionHeader
         eyebrow="Immutable review history"
         title="Versions & export"
-        description="Publish reviewed object manifests, keep prior designs intact, and create portable artifacts without an account."
+        description="Inspect learner-release quality, publish reviewed object manifests, and create a complete portable academic package."
       />
       <div className="content-grid versions-grid">
         <div className="stack">
+          <section className="panel output-quality-card">
+            <div className="panel-heading">
+              <div><p className="eyebrow">Quality before format</p><h2>Output readiness</h2></div>
+              <StatusPill tone={outputQuality.blocked ? "danger" : outputQuality.review ? "warn" : "good"}>
+                {outputQuality.blocked ? "Blocked" : outputQuality.review ? "Instructor review" : "Learner ready"}
+              </StatusPill>
+            </div>
+            <p>The package separates student materials, instructor guidance, assessment briefs, research evidence, schedules, rubrics, freshness, and quality reports. Missing decisions remain explicit completion requirements.</p>
+            <div className="output-quality-summary">
+              <span className="good"><strong>{outputQuality.passed}</strong> pass</span>
+              <span className="warn"><strong>{outputQuality.review}</strong> review</span>
+              <span className="danger"><strong>{outputQuality.blocked}</strong> block</span>
+            </div>
+            <div className="output-checks">
+              {outputQuality.checks.map((check) => (
+                <div className={check.status} key={check.id}>
+                  {check.status === "pass" ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+                  <div><strong>{check.label}</strong><span>{check.detail}</span></div>
+                </div>
+              ))}
+            </div>
+          </section>
           <section className="panel publish-card">
-            <div className="panel-heading"><div><p className="eyebrow">Publication gate</p><h2>Create a local version</h2></div><StatusPill tone={summary.canPublish ? "good" : "danger"}>{summary.canPublish ? "Eligible" : "Blocked"}</StatusPill></div>
+            <div className="panel-heading"><div><p className="eyebrow">Publication gate</p><h2>Create a local version</h2></div><StatusPill tone={publicationEligible ? "good" : "danger"}>{publicationEligible ? "Eligible" : "Blocked"}</StatusPill></div>
             <p>Publication freezes a manifest of canonical object IDs and an integrity hash. It does not assert accreditation or replace disciplinary review.</p>
             <div className="form-grid two">
               <label className="field"><span>Approving identity</span><input value={approver} onChange={(e) => setApprover(e.target.value)} /></label>
               <label className="field wide"><span>Release notes</span><textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
             </div>
             {!summary.canPublish ? <div className="inline-notice danger"><AlertTriangle size={16} /><span>{summary.critical} critical finding{summary.critical === 1 ? "" : "s"} must be resolved. Critical issues cannot be waived.</span></div> : null}
-            <button className="button primary" onClick={publish} disabled={!summary.canPublish || !approver.trim() || publishing}>{publishing ? <Loader2 className="spin" size={16} /> : <LockKeyhole size={16} />} Publish version</button>
+            {summary.canPublish && outputQuality.blocked ? <div className="inline-notice danger"><AlertTriangle size={16} /><span>{outputQuality.blocked} output-readiness blocker{outputQuality.blocked === 1 ? "" : "s"} must be resolved before version publication.</span></div> : null}
+            <button className="button primary" onClick={publish} disabled={!publicationEligible || !approver.trim() || publishing}>{publishing ? <Loader2 className="spin" size={16} /> : <LockKeyhole size={16} />} Publish version</button>
           </section>
           <section className="panel version-history">
             <div className="panel-heading"><div><p className="eyebrow">History</p><h2>Published versions</h2></div><span className="count-badge">{project.versions.length}</span></div>
@@ -1283,11 +1422,11 @@ function VersionsView({
         </div>
         <aside className="stack sticky-column">
           <section className="panel export-card">
-            <div className="panel-heading"><div><p className="eyebrow">Portable by default</p><h2>Export</h2></div><Download size={18} /></div>
-            <button className="export-option" onClick={() => onExport("bundle")}><span className="filetype archive"><FileArchive size={18} /></span><div><strong>Resea project bundle</strong><small>Checksummed backup + artifacts</small></div><Download size={15} /></button>
-            <button className="export-option" onClick={() => onExport("markdown")}><span className="filetype md">MD</span><div><strong>Academic Markdown</strong><small>Syllabus, evidence, and audit appendix</small></div><Download size={15} /></button>
-            <button className="export-option" onClick={() => onExport("json")}><span className="filetype json">{`{ }`}</span><div><strong>Canonical JSON</strong><small>Objects, relations, provenance</small></div><Download size={15} /></button>
-            <button className="export-option" onClick={() => onExport("csv")}><span className="filetype csv">CSV</span><div><strong>Alignment map</strong><small>Outcomes, practice, assessment</small></div><Download size={15} /></button>
+            <div className="panel-heading"><div><p className="eyebrow">Portable by default</p><h2>Academic package</h2></div><Download size={18} /></div>
+            <button className="export-option" onClick={() => onExport("bundle")}><span className="filetype archive"><FileArchive size={18} /></span><div><strong>Complete Resea package</strong><small>Student, instructor, assessment, research, data, quality + verified backup</small></div><Download size={15} /></button>
+            <button className="export-option" onClick={() => onExport("markdown")}><span className="filetype md">MD</span><div><strong>Complete academic Markdown</strong><small>Student syllabus, instructor guide, evidence, quality, version history</small></div><Download size={15} /></button>
+            <button className="export-option" onClick={() => onExport("json")}><span className="filetype json">{`{ }`}</span><div><strong>Canonical JSON envelope</strong><small>Objects, relations, provenance, renderer, quality + project checksum</small></div><Download size={15} /></button>
+            <button className="export-option" onClick={() => onExport("csv")}><span className="filetype csv">CSV</span><div><strong>Detailed alignment map</strong><small>Conditions, criteria, concepts, modules, practice, assessment, provenance</small></div><Download size={15} /></button>
           </section>
           <section className="panel restore-card">
             <p className="eyebrow">Restore</p>
