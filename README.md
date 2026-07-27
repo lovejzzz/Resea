@@ -16,11 +16,13 @@ The current pilot release includes:
 - manual HTTPS source and exact-excerpt capture;
 - a provenance-preserving source library, evidence desk, and citation inspector;
 - explicit claims, concepts, prerequisites, outcomes, activities, assessments, rubrics, and workload;
+- module-scoped activity and assessment editors that update alignment, review state, and workload together;
 - deterministic publication audits for citation integrity, alignment, cycles, risk review, licensing, freshness, accessibility, assessment policy, and workload;
 - per-source freshness intervals and user-triggered metadata checks;
 - immutable local version manifests with SHA-256 integrity hashes;
 - Markdown, canonical JSON, alignment CSV, and checksummed `.resea` bundle exports;
-- IndexedDB persistence, a durable-storage request, offline shell caching, and import/restore;
+- multi-course IndexedDB persistence and switching, a durable-storage request, and offline shell caching;
+- bounded import/restore with schema, archive-path, manifest, project-identity, and checksum validation;
 - organizer-only operation when no local model is installed;
 - a Manifest V3 companion extension for narrow active-tab capture and optional per-host retrieval;
 - a realistic social-science research methods fixture that demonstrates the full evidence-to-course path.

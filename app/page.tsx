@@ -42,10 +42,12 @@ import type { FormEvent } from "react";
 import type { LucideIcon } from "lucide-react";
 import { alignmentMetrics, auditSummary, runAudit } from "@/lib/audit";
 import { exportProject, importProjectFile } from "@/lib/export";
-import { cloneSample, createBlankProject } from "@/lib/project";
+import { cloneSample, createBlankProject, createSampleProject } from "@/lib/project";
 import { createResearchPlan, safeResearchUrl, searchOpenAlex } from "@/lib/research";
-import { loadProject, requestDurableStorage, saveProject, storageEstimate } from "@/lib/storage";
+import { listProjects, loadProject, requestDurableStorage, saveProject, storageEstimate } from "@/lib/storage";
 import type {
+  Activity,
+  Assessment,
   AuditFinding,
   CourseSpec,
   ProjectState,
@@ -358,6 +360,10 @@ function ResearchView({
   const question = plan.questions.find((item) => item.id === selectedQuestion) ?? plan.questions[0];
 
   const generatePlan = () => {
+    if (project.spec.reviewState !== "approved") {
+      notify("Approve the course brief before proposing a research plan.");
+      return;
+    }
     const nextPlan = createResearchPlan(project.spec);
     setProject((current) => ({
       ...current,
@@ -476,8 +482,10 @@ function ResearchView({
         <EmptyState
           icon={FlaskConical}
           title="No research plan yet"
-          body="Resea will translate the course brief into question families, source targets, query proposals, and explicit stopping conditions. It will not invent search results."
-          action={<button className="button primary" onClick={generatePlan}><Sparkles size={16} /> Propose research plan</button>}
+          body={project.spec.reviewState === "approved"
+            ? "Resea will translate the approved course brief into question families, source targets, query proposals, and explicit stopping conditions. It will not invent search results."
+            : "Approve the course brief first. Research questions inherit its learners, constraints, risk tier, and instructor-reviewed assumptions."}
+          action={<button className="button primary" disabled={project.spec.reviewState !== "approved"} onClick={generatePlan}><Sparkles size={16} /> Propose research plan</button>}
         />
       </>
     );
@@ -596,11 +604,23 @@ function ResearchView({
 function EvidenceView({
   project,
   setProject,
+  focusObjectId,
 }: {
   project: ProjectState;
   setProject: React.Dispatch<React.SetStateAction<ProjectState>>;
+  focusObjectId?: string;
 }) {
-  const [selectedClaim, setSelectedClaim] = useState(project.claims[0]?.id ?? "");
+  const focusedClaimId =
+    project.claims.find((item) => item.id === focusObjectId)?.id ??
+    project.claims.find((item) =>
+      item.supportingEvidenceIds.some((evidenceId) =>
+        project.evidence.some(
+          (evidence) =>
+            evidence.id === evidenceId && evidence.sourceId === focusObjectId,
+        ),
+      ),
+  )?.id;
+  const [selectedClaim, setSelectedClaim] = useState(focusedClaimId ?? project.claims[0]?.id ?? "");
   const claim = project.claims.find((item) => item.id === selectedClaim) ?? project.claims[0];
   const evidence = claim
     ? project.evidence.filter((item) => claim.supportingEvidenceIds.includes(item.id))
@@ -688,7 +708,7 @@ function MapView({ project }: { project: ProjectState }) {
         eyebrow="Prerequisites and alignment"
         title="Curriculum map"
         description="Move from evidence to an explicit sequence of concepts, outcomes, practice, and assessment."
-        action={<button className="button secondary"><GitBranch size={16} /> Outline view</button>}
+        action={<StatusPill tone="blue"><GitBranch size={14} /> Accessible outline</StatusPill>}
       />
       <div className="map-metrics">
         <section className="metric-card"><span>Assessment coverage</span><strong>{metrics.assessmentCoverage}%</strong><small>Target 100%</small></section>
@@ -741,11 +761,212 @@ function MapView({ project }: { project: ProjectState }) {
   );
 }
 
-function BuildView({ project }: { project: ProjectState }) {
-  const [selectedModule, setSelectedModule] = useState(project.modules[0]?.id ?? "");
+function BuildView({
+  project,
+  setProject,
+  notify,
+  focusObjectId,
+}: {
+  project: ProjectState;
+  setProject: React.Dispatch<React.SetStateAction<ProjectState>>;
+  notify: (message: string) => void;
+  focusObjectId?: string;
+}) {
+  const [selectedModule, setSelectedModule] = useState(
+    project.modules.some((module) => module.id === focusObjectId)
+      ? focusObjectId ?? ""
+      : project.modules[0]?.id ?? "",
+  );
+  const [editor, setEditor] = useState<"activity" | "assessment" | null>(null);
+  const [activityDraft, setActivityDraft] = useState({
+    title: "",
+    type: "Guided practice",
+    instructions: "",
+    outcomeId: "",
+    estimatedMinutes: 30,
+    feedback: "Instructor feedback",
+    accessibilityAlternative: "",
+  });
+  const [assessmentDraft, setAssessmentDraft] = useState({
+    title: "",
+    type: "Performance task",
+    stakes: "formative" as Assessment["stakes"],
+    task: "",
+    outcomeId: "",
+    estimatedMinutes: 45,
+    gradingMinutesPerStudent: 8,
+    rubricCriteria: "",
+    toolPolicy: "Course tools are optional unless the instructor specifies otherwise.",
+    accessibilityAlternative: "",
+  });
   const selectedModuleObject =
     project.modules.find((item) => item.id === selectedModule) ??
     project.modules[0];
+  const availableOutcomes = project.outcomes.filter((outcome) =>
+    selectedModuleObject?.outcomeIds.includes(outcome.id),
+  );
+
+  const openEditor = (kind: "activity" | "assessment") => {
+    const outcomeId = availableOutcomes[0]?.id ?? "";
+    if (kind === "activity") {
+      setActivityDraft((current) => ({ ...current, outcomeId }));
+    } else {
+      setAssessmentDraft((current) => ({ ...current, outcomeId }));
+    }
+    setEditor(kind);
+  };
+
+  const addActivity = (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedModuleObject || !activityDraft.outcomeId) return;
+    if (
+      !activityDraft.title.trim() ||
+      !activityDraft.type.trim() ||
+      !activityDraft.instructions.trim() ||
+      !activityDraft.feedback.trim()
+    ) {
+      notify("Complete the activity title, type, instructions, and feedback method.");
+      return;
+    }
+    const activity: Activity = {
+      id: uid("activity"),
+      title: activityDraft.title.trim(),
+      type: activityDraft.type.trim(),
+      instructions: activityDraft.instructions.trim(),
+      outcomeIds: [activityDraft.outcomeId],
+      estimatedMinutes: activityDraft.estimatedMinutes,
+      feedback: activityDraft.feedback.trim(),
+      accessibilityAlternatives: activityDraft.accessibilityAlternative.trim()
+        ? [activityDraft.accessibilityAlternative.trim()]
+        : [],
+    };
+    setProject((current) => ({
+      ...current,
+      modules: current.modules.map((module) =>
+        module.id === selectedModuleObject.id
+          ? {
+              ...module,
+              activities: [...module.activities, activity],
+              estimatedStudentMinutes:
+                module.estimatedStudentMinutes + activity.estimatedMinutes,
+              reviewState: "needs_review",
+            }
+          : module,
+      ),
+      outcomes: current.outcomes.map((outcome) =>
+        outcome.id === activityDraft.outcomeId
+          ? {
+              ...outcome,
+              activityIds: [...new Set([...outcome.activityIds, activity.id])],
+              reviewState: "needs_review",
+            }
+          : outcome,
+      ),
+      updatedAt: isoNow(),
+      events: [
+        ...current.events,
+        {
+          id: uid("event"),
+          at: isoNow(),
+          action: "Activity added",
+          detail: `Added ${activity.title} to ${selectedModuleObject.title}; mapped outcome requires review.`,
+        },
+      ],
+    }));
+    setActivityDraft({
+      title: "",
+      type: "Guided practice",
+      instructions: "",
+      outcomeId: availableOutcomes[0]?.id ?? "",
+      estimatedMinutes: 30,
+      feedback: "Instructor feedback",
+      accessibilityAlternative: "",
+    });
+    setEditor(null);
+    notify("Activity added; workload and outcome alignment were updated for review.");
+  };
+
+  const addAssessment = (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedModuleObject || !assessmentDraft.outcomeId) return;
+    if (
+      !assessmentDraft.title.trim() ||
+      !assessmentDraft.type.trim() ||
+      !assessmentDraft.task.trim() ||
+      !assessmentDraft.rubricCriteria.split(",").some((criterion) => criterion.trim())
+    ) {
+      notify("Complete the assessment title, type, task, and at least one rubric criterion.");
+      return;
+    }
+    const assessment: Assessment = {
+      id: uid("assessment"),
+      title: assessmentDraft.title.trim(),
+      type: assessmentDraft.type.trim(),
+      stakes: assessmentDraft.stakes,
+      task: assessmentDraft.task.trim(),
+      outcomeIds: [assessmentDraft.outcomeId],
+      estimatedMinutes: assessmentDraft.estimatedMinutes,
+      gradingMinutesPerStudent: assessmentDraft.gradingMinutesPerStudent,
+      rubricCriteria: assessmentDraft.rubricCriteria
+        .split(",")
+        .map((criterion) => criterion.trim())
+        .filter(Boolean),
+      toolPolicy: assessmentDraft.toolPolicy.trim(),
+      accessibilityAlternatives: assessmentDraft.accessibilityAlternative.trim()
+        ? [assessmentDraft.accessibilityAlternative.trim()]
+        : [],
+    };
+    setProject((current) => ({
+      ...current,
+      modules: current.modules.map((module) =>
+        module.id === selectedModuleObject.id
+          ? {
+              ...module,
+              assessments: [...module.assessments, assessment],
+              estimatedStudentMinutes:
+                module.estimatedStudentMinutes + assessment.estimatedMinutes,
+              reviewState: "needs_review",
+            }
+          : module,
+      ),
+      outcomes: current.outcomes.map((outcome) =>
+        outcome.id === assessmentDraft.outcomeId
+          ? {
+              ...outcome,
+              assessmentIds: [
+                ...new Set([...outcome.assessmentIds, assessment.id]),
+              ],
+              reviewState: "needs_review",
+            }
+          : outcome,
+      ),
+      updatedAt: isoNow(),
+      events: [
+        ...current.events,
+        {
+          id: uid("event"),
+          at: isoNow(),
+          action: "Assessment added",
+          detail: `Added ${assessment.title} to ${selectedModuleObject.title}; mapped outcome requires review.`,
+        },
+      ],
+    }));
+    setAssessmentDraft({
+      title: "",
+      type: "Performance task",
+      stakes: "formative",
+      task: "",
+      outcomeId: availableOutcomes[0]?.id ?? "",
+      estimatedMinutes: 45,
+      gradingMinutesPerStudent: 8,
+      rubricCriteria: "",
+      toolPolicy: "Course tools are optional unless the instructor specifies otherwise.",
+      accessibilityAlternative: "",
+    });
+    setEditor(null);
+    notify("Assessment added; workload, grading load, and alignment were updated for review.");
+  };
+
   return (
     <>
       <SectionHeader
@@ -758,7 +979,7 @@ function BuildView({ project }: { project: ProjectState }) {
           <div className="pane-title"><span>Course structure</span><span className="count-badge">{project.modules.length}</span></div>
           <div className="tree-root"><BookOpen size={16} /><strong>{project.spec.title}</strong></div>
           {project.modules.map((item) => (
-            <button key={item.id} className={`tree-item ${selectedModuleObject?.id === item.id ? "active" : ""}`} onClick={() => setSelectedModule(item.id)}>
+            <button key={item.id} className={`tree-item ${selectedModuleObject?.id === item.id ? "active" : ""}`} onClick={() => { setSelectedModule(item.id); setEditor(null); }}>
               <span>{String(item.order).padStart(2, "0")}</span>
               <div><strong>{item.title}</strong><small>{item.estimatedStudentMinutes} min · {item.reviewState.replace("_", " ")}</small></div>
             </button>
@@ -776,8 +997,43 @@ function BuildView({ project }: { project: ProjectState }) {
                 <span><BookOpen size={16} /><strong>{selectedModuleObject.sourceIds.length}</strong> sources</span>
                 <span><History size={16} /><strong>{selectedModuleObject.estimatedStudentMinutes}</strong> min workload</span>
               </div>
+              {editor === "activity" ? (
+                <form className="object-editor" onSubmit={addActivity}>
+                  <div className="object-editor-heading"><div><p className="eyebrow">New canonical object</p><h3>Add activity</h3></div><button type="button" className="icon-button" aria-label="Close activity editor" onClick={() => setEditor(null)}><X size={16} /></button></div>
+                  <div className="form-grid two">
+                    <label className="field"><span>Title</span><input required value={activityDraft.title} onChange={(e) => setActivityDraft({ ...activityDraft, title: e.target.value })} /></label>
+                    <label className="field"><span>Activity type</span><input required value={activityDraft.type} onChange={(e) => setActivityDraft({ ...activityDraft, type: e.target.value })} /></label>
+                    <label className="field wide"><span>Instructions</span><textarea required rows={3} value={activityDraft.instructions} onChange={(e) => setActivityDraft({ ...activityDraft, instructions: e.target.value })} /></label>
+                    <label className="field"><span>Mapped outcome</span><select required value={activityDraft.outcomeId} onChange={(e) => setActivityDraft({ ...activityDraft, outcomeId: e.target.value })}><option value="">Select an outcome</option>{availableOutcomes.map((outcome) => <option key={outcome.id} value={outcome.id}>{outcome.code}: {outcome.action} {outcome.object}</option>)}</select></label>
+                    <label className="field"><span>Student minutes</span><input required min={1} type="number" value={activityDraft.estimatedMinutes} onChange={(e) => setActivityDraft({ ...activityDraft, estimatedMinutes: Number(e.target.value) })} /></label>
+                    <label className="field"><span>Feedback method</span><input required value={activityDraft.feedback} onChange={(e) => setActivityDraft({ ...activityDraft, feedback: e.target.value })} /></label>
+                    <label className="field"><span>Accessibility alternative</span><input value={activityDraft.accessibilityAlternative} onChange={(e) => setActivityDraft({ ...activityDraft, accessibilityAlternative: e.target.value })} placeholder="Equivalent text, audio, or low-bandwidth path" /></label>
+                  </div>
+                  {!availableOutcomes.length ? <div className="inline-notice danger"><AlertTriangle size={16} /><span>This module needs an approved outcome before adding practice.</span></div> : null}
+                  <div className="object-editor-actions"><button type="button" className="button secondary" onClick={() => setEditor(null)}>Cancel</button><button className="button primary" disabled={!availableOutcomes.length}><Plus size={15} /> Add activity</button></div>
+                </form>
+              ) : null}
+              {editor === "assessment" ? (
+                <form className="object-editor" onSubmit={addAssessment}>
+                  <div className="object-editor-heading"><div><p className="eyebrow">New canonical object</p><h3>Add assessment</h3></div><button type="button" className="icon-button" aria-label="Close assessment editor" onClick={() => setEditor(null)}><X size={16} /></button></div>
+                  <div className="form-grid two">
+                    <label className="field"><span>Title</span><input required value={assessmentDraft.title} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, title: e.target.value })} /></label>
+                    <label className="field"><span>Assessment type</span><input required value={assessmentDraft.type} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, type: e.target.value })} /></label>
+                    <label className="field"><span>Stakes</span><select value={assessmentDraft.stakes} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, stakes: e.target.value as Assessment["stakes"] })}><option value="diagnostic">Diagnostic</option><option value="formative">Formative</option><option value="summative">Summative</option></select></label>
+                    <label className="field"><span>Mapped outcome</span><select required value={assessmentDraft.outcomeId} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, outcomeId: e.target.value })}><option value="">Select an outcome</option>{availableOutcomes.map((outcome) => <option key={outcome.id} value={outcome.id}>{outcome.code}: {outcome.action} {outcome.object}</option>)}</select></label>
+                    <label className="field wide"><span>Student task</span><textarea required rows={3} value={assessmentDraft.task} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, task: e.target.value })} /></label>
+                    <label className="field"><span>Student minutes</span><input required min={1} type="number" value={assessmentDraft.estimatedMinutes} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, estimatedMinutes: Number(e.target.value) })} /></label>
+                    <label className="field"><span>Grading minutes / student</span><input required min={0} type="number" value={assessmentDraft.gradingMinutesPerStudent} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, gradingMinutesPerStudent: Number(e.target.value) })} /></label>
+                    <label className="field wide"><span>Rubric criteria</span><input required value={assessmentDraft.rubricCriteria} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, rubricCriteria: e.target.value })} placeholder="Accuracy, evidence use, interpretation" /></label>
+                    <label className="field"><span>Tool policy</span><textarea rows={2} value={assessmentDraft.toolPolicy} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, toolPolicy: e.target.value })} /></label>
+                    <label className="field"><span>Accessibility alternative</span><textarea rows={2} value={assessmentDraft.accessibilityAlternative} onChange={(e) => setAssessmentDraft({ ...assessmentDraft, accessibilityAlternative: e.target.value })} /></label>
+                  </div>
+                  {!availableOutcomes.length ? <div className="inline-notice danger"><AlertTriangle size={16} /><span>This module needs an approved outcome before adding an assessment.</span></div> : null}
+                  <div className="object-editor-actions"><button type="button" className="button secondary" onClick={() => setEditor(null)}>Cancel</button><button className="button primary" disabled={!availableOutcomes.length}><Plus size={15} /> Add assessment</button></div>
+                </form>
+              ) : null}
               <section className="object-section">
-                <div className="object-heading"><div><p className="eyebrow">Practice</p><h3>Activities and feedback</h3></div><button className="button ghost small"><Plus size={14} /> Add activity</button></div>
+                <div className="object-heading"><div><p className="eyebrow">Practice</p><h3>Activities and feedback</h3></div><button className="button ghost small" onClick={() => openEditor("activity")}><Plus size={14} /> Add activity</button></div>
                 {selectedModuleObject.activities.length ? selectedModuleObject.activities.map((activity) => (
                   <article className="object-card" key={activity.id}>
                     <div className="object-icon"><GraduationCap size={17} /></div>
@@ -790,7 +1046,7 @@ function BuildView({ project }: { project: ProjectState }) {
                 )) : <EmptyState icon={GraduationCap} title="Practice gap" body="This module maps outcomes but does not yet give learners a feedback-bearing opportunity to practice." />}
               </section>
               <section className="object-section">
-                <div className="object-heading"><div><p className="eyebrow">Evidence of learning</p><h3>Assessments and rubrics</h3></div><button className="button ghost small"><Plus size={14} /> Add assessment</button></div>
+                <div className="object-heading"><div><p className="eyebrow">Evidence of learning</p><h3>Assessments and rubrics</h3></div><button className="button ghost small" onClick={() => openEditor("assessment")}><Plus size={14} /> Add assessment</button></div>
                 {selectedModuleObject.assessments.length ? selectedModuleObject.assessments.map((assessment) => (
                   <article className="object-card assessment" key={assessment.id}>
                     <div className="object-icon"><ClipboardCheck size={17} /></div>
@@ -811,12 +1067,25 @@ function BuildView({ project }: { project: ProjectState }) {
   );
 }
 
-function AuditView({ project }: { project: ProjectState }) {
+function AuditView({
+  project,
+  onNavigate,
+}: {
+  project: ProjectState;
+  onNavigate: (view: ViewId, focusObjectId?: string) => void;
+}) {
   const findings = runAudit(project);
   const summary = auditSummary(findings);
   const metrics = alignmentMetrics(project);
   const [filter, setFilter] = useState<"all" | AuditFinding["severity"]>("all");
   const visible = filter === "all" ? findings : findings.filter((item) => item.severity === filter);
+  const findingWorkspace = (category: string): ViewId => {
+    if (["Evidence & citations", "Licensing & access"].includes(category)) return "evidence";
+    if (category === "Freshness") return "refresh";
+    if (["Outcomes", "Concept sequence"].includes(category)) return "map";
+    if (category === "Risk & review") return "brief";
+    return "build";
+  };
 
   return (
     <>
@@ -852,7 +1121,7 @@ function AuditView({ project }: { project: ProjectState }) {
           <article className={`finding ${item.severity}`} key={item.id}>
             <div className="finding-severity"><AlertTriangle size={17} /><span>{item.severity}</span></div>
             <div className="finding-body"><div><code>{item.ruleId}</code><span>{item.checkerType.replace("_", " ")}</span></div><h3>{item.title}</h3><p>{item.description}</p><small><strong>Remediation:</strong> {item.remediation}</small></div>
-            <button className="button ghost small">Inspect <ArrowRight size={14} /></button>
+            <button className="button ghost small" onClick={() => onNavigate(findingWorkspace(item.category), item.objectIds[0])}>Open workspace <ArrowRight size={14} /></button>
           </article>
         ))}
         {!visible.length ? <EmptyState icon={CheckCircle2} title="No findings in this category" body="The current canonical objects pass these structural checks." /> : null}
@@ -929,11 +1198,13 @@ function VersionsView({
   setProject,
   notify,
   importRef,
+  onExport,
 }: {
   project: ProjectState;
   setProject: React.Dispatch<React.SetStateAction<ProjectState>>;
   notify: (message: string) => void;
   importRef: React.RefObject<HTMLInputElement | null>;
+  onExport: (format: "markdown" | "json" | "csv" | "bundle") => Promise<void>;
 }) {
   const findings = runAudit(project);
   const summary = auditSummary(findings);
@@ -1013,10 +1284,10 @@ function VersionsView({
         <aside className="stack sticky-column">
           <section className="panel export-card">
             <div className="panel-heading"><div><p className="eyebrow">Portable by default</p><h2>Export</h2></div><Download size={18} /></div>
-            <button className="export-option" onClick={() => exportProject(project, "bundle")}><span className="filetype archive"><FileArchive size={18} /></span><div><strong>Resea project bundle</strong><small>Checksummed backup + artifacts</small></div><Download size={15} /></button>
-            <button className="export-option" onClick={() => exportProject(project, "markdown")}><span className="filetype md">MD</span><div><strong>Academic Markdown</strong><small>Syllabus, evidence, and audit appendix</small></div><Download size={15} /></button>
-            <button className="export-option" onClick={() => exportProject(project, "json")}><span className="filetype json">{`{ }`}</span><div><strong>Canonical JSON</strong><small>Objects, relations, provenance</small></div><Download size={15} /></button>
-            <button className="export-option" onClick={() => exportProject(project, "csv")}><span className="filetype csv">CSV</span><div><strong>Alignment map</strong><small>Outcomes, practice, assessment</small></div><Download size={15} /></button>
+            <button className="export-option" onClick={() => onExport("bundle")}><span className="filetype archive"><FileArchive size={18} /></span><div><strong>Resea project bundle</strong><small>Checksummed backup + artifacts</small></div><Download size={15} /></button>
+            <button className="export-option" onClick={() => onExport("markdown")}><span className="filetype md">MD</span><div><strong>Academic Markdown</strong><small>Syllabus, evidence, and audit appendix</small></div><Download size={15} /></button>
+            <button className="export-option" onClick={() => onExport("json")}><span className="filetype json">{`{ }`}</span><div><strong>Canonical JSON</strong><small>Objects, relations, provenance</small></div><Download size={15} /></button>
+            <button className="export-option" onClick={() => onExport("csv")}><span className="filetype csv">CSV</span><div><strong>Alignment map</strong><small>Outcomes, practice, assessment</small></div><Download size={15} /></button>
           </section>
           <section className="panel restore-card">
             <p className="eyebrow">Restore</p>
@@ -1075,10 +1346,14 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(true);
   const [globalQuery, setGlobalQuery] = useState("");
+  const [focusObjectId, setFocusObjectId] = useState<string | undefined>();
   const [toast, setToast] = useState("");
   const [saveState, setSaveState] = useState<"saving" | "saved">("saved");
   const [storageText, setStorageText] = useState("Local");
+  const [knownProjects, setKnownProjects] = useState<ProjectState[]>([]);
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -1092,7 +1367,11 @@ export default function Home() {
       const saved = await loadProject(activeId);
       if (!active) return;
       if (saved) setProject(saved);
-      else await saveProject(project);
+      else {
+        await saveProject(project);
+        localStorage.setItem("resea-active-project", project.id);
+      }
+      setKnownProjects(await listProjects());
       const estimate = await storageEstimate();
       if (estimate?.quota) {
         const used = estimate.usage ?? 0;
@@ -1112,6 +1391,7 @@ export default function Home() {
       const next = { ...project, updatedAt: isoNow() };
       await saveProject(next);
       localStorage.setItem("resea-active-project", next.id);
+      setKnownProjects(await listProjects());
       setSaveState("saved");
     }, 450);
     return () => window.clearTimeout(timer);
@@ -1121,6 +1401,21 @@ export default function Home() {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchRef.current?.focus();
+      }
+      if (event.key === "Escape") {
+        setGlobalQuery("");
+        setProjectMenuOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   const updateSpec = (patch: Partial<CourseSpec>) => {
@@ -1151,12 +1446,63 @@ export default function Home() {
   };
 
   const resetProject = async (kind: "sample" | "blank") => {
-    const next = kind === "sample" ? cloneSample() : createBlankProject();
+    await saveProject({ ...project, updatedAt: isoNow() });
+    const next = kind === "sample" ? createSampleProject() : createBlankProject();
+    if (kind === "sample") {
+      const baseTitle = next.spec.title;
+      const copyNumber = Math.max(
+        1,
+        knownProjects.filter((item) => item.spec.title.startsWith(baseTitle)).length,
+      );
+      next.title = `${baseTitle} — Sample copy ${copyNumber}`;
+      next.spec.title = next.title;
+    }
     setProject(next);
     await saveProject(next);
     localStorage.setItem("resea-active-project", next.id);
+    setKnownProjects(await listProjects());
+    setProjectMenuOpen(false);
     setView("brief");
-    notify(kind === "sample" ? "Sample research project restored." : "New browser-local project created.");
+    setFocusObjectId(undefined);
+    notify(kind === "sample" ? "A fresh sample course was added." : "New browser-local project created.");
+  };
+
+  const switchProject = async (projectId: string) => {
+    if (projectId === project.id) {
+      setProjectMenuOpen(false);
+      setSidebarOpen(false);
+      return;
+    }
+    await saveProject({ ...project, updatedAt: isoNow() });
+    const next = await loadProject(projectId);
+    if (!next) {
+      notify("That local project is no longer available.");
+      setKnownProjects(await listProjects());
+      return;
+    }
+    setProject(next);
+    localStorage.setItem("resea-active-project", next.id);
+    setProjectMenuOpen(false);
+    setSidebarOpen(false);
+    setView("brief");
+    setFocusObjectId(undefined);
+    notify(`Opened ${next.spec.title}.`);
+  };
+
+  const handleExport = async (format: "markdown" | "json" | "csv" | "bundle") => {
+    try {
+      let exportedProject = project;
+      if (format === "bundle") {
+        exportedProject = { ...project, backupAt: isoNow(), updatedAt: isoNow() };
+        setProject(exportedProject);
+        await saveProject(exportedProject);
+        setKnownProjects(await listProjects());
+      }
+      await exportProject(exportedProject, format);
+      notify(format === "bundle" ? "Verified project backup downloaded." : `${format.toUpperCase()} export downloaded.`);
+    } catch {
+      notify("The export could not be created.");
+    }
   };
 
   const importProject = async (file?: File) => {
@@ -1166,6 +1512,8 @@ export default function Home() {
       setProject(next);
       await saveProject(next);
       localStorage.setItem("resea-active-project", next.id);
+      setKnownProjects(await listProjects());
+      setFocusObjectId(undefined);
       notify("Project validated and restored.");
     } catch (error) {
       notify(error instanceof Error ? error.message : "The project could not be imported.");
@@ -1178,11 +1526,11 @@ export default function Home() {
     const q = globalQuery.trim().toLowerCase();
     if (!q) return [];
     return [
-      ...project.sources.map((source) => ({ type: "Source", label: source.title, view: "evidence" as ViewId })),
-      ...project.claims.map((claim) => ({ type: "Claim", label: claim.text, view: "evidence" as ViewId })),
-      ...project.concepts.map((concept) => ({ type: "Concept", label: concept.label, view: "map" as ViewId })),
-      ...project.outcomes.map((outcome) => ({ type: outcome.code, label: `${outcome.action} ${outcome.object}`, view: "map" as ViewId })),
-      ...project.modules.map((module) => ({ type: `Module ${module.order}`, label: module.title, view: "build" as ViewId })),
+      ...project.sources.map((source) => ({ id: source.id, type: "Source", label: source.title, view: "evidence" as ViewId })),
+      ...project.claims.map((claim) => ({ id: claim.id, type: "Claim", label: claim.text, view: "evidence" as ViewId })),
+      ...project.concepts.map((concept) => ({ id: concept.id, type: "Concept", label: concept.label, view: "map" as ViewId })),
+      ...project.outcomes.map((outcome) => ({ id: outcome.id, type: outcome.code, label: `${outcome.action} ${outcome.object}`, view: "map" as ViewId })),
+      ...project.modules.map((module) => ({ id: module.id, type: `Module ${module.order}`, label: module.title, view: "build" as ViewId })),
     ].filter((item) => item.label.toLowerCase().includes(q)).slice(0, 6);
   }, [globalQuery, project]);
 
@@ -1201,16 +1549,34 @@ export default function Home() {
         </div>
         <div className="project-selector">
           <span className="project-kicker">ACTIVE COURSE</span>
-          <button>{project.spec.title}<ChevronDown size={14} /></button>
+          <button aria-haspopup="menu" aria-expanded={projectMenuOpen} onClick={() => setProjectMenuOpen((open) => !open)}>{project.spec.title}<ChevronDown size={14} /></button>
+          {projectMenuOpen ? (
+            <div className="project-popover" role="menu" aria-label="Local courses">
+              <div className="project-popover-heading"><span>Local courses</span><small>{knownProjects.length}</small></div>
+              <div className="project-popover-list">
+                {knownProjects.map((item) => (
+                  <button role="menuitem" className={item.id === project.id ? "active" : ""} key={item.id} onClick={() => switchProject(item.id)}>
+                    <span>{item.spec.title}</span>
+                    <small>{item.id === project.id ? "Open now" : `Updated ${formatDate(item.updatedAt)}`}</small>
+                    {item.id === project.id ? <Check size={14} /> : null}
+                  </button>
+                ))}
+              </div>
+              <div className="project-popover-actions">
+                <button onClick={() => resetProject("blank")}><Plus size={14} /> New course</button>
+                <button onClick={() => resetProject("sample")}><FolderOpen size={14} /> Add sample</button>
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className="global-search">
           <Search size={16} aria-hidden />
-          <input value={globalQuery} onChange={(e) => setGlobalQuery(e.target.value)} placeholder="Search this course…" aria-label="Search this course" />
+          <input ref={searchRef} value={globalQuery} onChange={(e) => setGlobalQuery(e.target.value)} placeholder="Search this course…" aria-label="Search this course" />
           <kbd>⌘ K</kbd>
           {globalMatches.length ? (
             <div className="search-popover">
               {globalMatches.map((match, index) => (
-                <button key={`${match.type}-${index}`} onClick={() => { setView(match.view); setGlobalQuery(""); }}>
+                <button key={`${match.type}-${index}`} onClick={() => { setFocusObjectId(match.id); setView(match.view); setGlobalQuery(""); }}>
                   <span>{match.type}</span><strong>{match.label}</strong>
                 </button>
               ))}
@@ -1219,7 +1585,7 @@ export default function Home() {
         </div>
         <div className="top-status">
           <span className="save-status">{saveState === "saving" ? <Loader2 className="spin" size={14} /> : <CheckCircle2 size={14} />} {saveState === "saving" ? "Saving…" : "Saved locally"}</span>
-          <button className="button export-button" onClick={() => exportProject(project, "bundle")}><Download size={15} /> Export</button>
+          <button className="button export-button" onClick={() => handleExport("bundle")}><Download size={15} /> Back up</button>
         </div>
       </header>
 
@@ -1234,17 +1600,25 @@ export default function Home() {
               item.id === "audit" ? runAudit(project).filter((f) => f.severity === "critical").length :
               item.id === "refresh" ? project.sources.filter((s) => s.nextCheck < isoNow().slice(0, 10)).length : 0;
             return (
-              <button key={item.id} className={view === item.id ? "active" : ""} aria-current={view === item.id ? "page" : undefined} onClick={() => { setView(item.id); setSidebarOpen(false); }}>
+              <button key={item.id} className={view === item.id ? "active" : ""} aria-current={view === item.id ? "page" : undefined} onClick={() => { setFocusObjectId(undefined); setView(item.id); setSidebarOpen(false); }}>
                 <Icon size={18} /><span>{item.label}</span>{badge ? <em>{badge}</em> : null}
               </button>
             );
           })}
         </nav>
         <div className="sidebar-footer">
-          <div className="local-card"><HardDrive size={16} /><div><strong>{storageText}</strong><span>Device-local storage</span></div></div>
+          <div className="sidebar-courses">
+            <span>Your courses</span>
+            {knownProjects.slice(0, 4).map((item) => (
+              <button className={item.id === project.id ? "active" : ""} key={item.id} onClick={() => switchProject(item.id)}>
+                <span>{item.spec.title}</span>{item.id === project.id ? <Check size={12} /> : null}
+              </button>
+            ))}
+          </div>
+          <div className="local-card"><HardDrive size={16} /><div><strong>{storageText}</strong><span>{project.backupAt ? `Backed up ${formatDate(project.backupAt)}` : "No project backup yet"}</span></div></div>
           <button className="sidebar-link" onClick={async () => notify((await requestDurableStorage()) ? "The browser granted persistent storage." : "Persistent storage was not granted; regular exports remain recommended.")}><Archive size={16} /> Request durable storage</button>
           <button className="sidebar-link" onClick={() => resetProject("blank")}><Plus size={16} /> New course</button>
-          <button className="sidebar-link" onClick={() => resetProject("sample")}><FolderOpen size={16} /> Restore sample</button>
+          <button className="sidebar-link" onClick={() => resetProject("sample")}><FolderOpen size={16} /> Add sample course</button>
         </div>
       </aside>
       {sidebarOpen ? <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} /> : null}
@@ -1252,12 +1626,12 @@ export default function Home() {
       <main id="main-content" className={`workspace ${contextOpen ? "" : "wide"}`}>
         {view === "brief" ? <BriefView project={project} updateSpec={updateSpec} approveBrief={approveBrief} /> : null}
         {view === "research" ? <ResearchView project={project} setProject={setProject} notify={notify} /> : null}
-        {view === "evidence" ? <EvidenceView project={project} setProject={setProject} /> : null}
+        {view === "evidence" ? <EvidenceView key={`${project.id}-${focusObjectId ?? "default"}`} project={project} setProject={setProject} focusObjectId={focusObjectId} /> : null}
         {view === "map" ? <MapView project={project} /> : null}
-        {view === "build" ? <BuildView project={project} /> : null}
-        {view === "audit" ? <AuditView project={project} /> : null}
+        {view === "build" ? <BuildView key={`${project.id}-${focusObjectId ?? "default"}`} project={project} setProject={setProject} notify={notify} focusObjectId={focusObjectId} /> : null}
+        {view === "audit" ? <AuditView project={project} onNavigate={(nextView, objectId) => { setFocusObjectId(objectId); setView(nextView); }} /> : null}
         {view === "refresh" ? <RefreshView project={project} setProject={setProject} notify={notify} /> : null}
-        {view === "versions" ? <VersionsView project={project} setProject={setProject} notify={notify} importRef={importRef} /> : null}
+        {view === "versions" ? <VersionsView project={project} setProject={setProject} notify={notify} importRef={importRef} onExport={handleExport} /> : null}
       </main>
 
       {contextOpen ? <ContextPanel project={project} view={view} onClose={() => setContextOpen(false)} /> : <button className="open-context" onClick={() => setContextOpen(true)} aria-label="Open course health panel"><PanelRightClose size={17} /></button>}

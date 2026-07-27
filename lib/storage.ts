@@ -24,6 +24,15 @@ export async function saveProject(project: ProjectState) {
   await db.put(STORE, project);
 }
 
+export async function listProjects(): Promise<ProjectState[]> {
+  const db = await database();
+  const projects = (await db.getAll(STORE)) as ProjectState[];
+  return projects.sort(
+    (left, right) =>
+      new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+  );
+}
+
 export async function clearProject(projectId: string) {
   const db = await database();
   await db.delete(STORE, projectId);

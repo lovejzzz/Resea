@@ -3,6 +3,10 @@ import type { ProjectState } from "./types";
 import { alignmentMetrics, auditSummary, runAudit } from "./audit";
 import { csvCell, downloadBlob, formatDate, sha256 } from "./utils";
 
+const MAX_IMPORT_BYTES = 1024 * 1024 * 1024;
+const MAX_ARCHIVE_ENTRIES = 10_000;
+const MAX_PROJECT_JSON_CHARACTERS = 100 * 1024 * 1024;
+
 function courseOutcomeText(project: ProjectState, outcomeId: string) {
   const outcome = project.outcomes.find((item) => item.id === outcomeId);
   return outcome
@@ -203,33 +207,78 @@ export async function exportProject(project: ProjectState, format: "markdown" | 
 }
 
 export async function importProjectFile(file: File): Promise<ProjectState> {
+  if (file.size > MAX_IMPORT_BYTES) {
+    throw new Error("This project is larger than the 1 GB import limit.");
+  }
   let raw: string;
+  let manifestProjectId: string | undefined;
   if (file.name.endsWith(".resea") || file.type === "application/zip") {
-    const zip = await JSZip.loadAsync(file);
+    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+    const names = Object.keys(zip.files);
+    if (names.length > MAX_ARCHIVE_ENTRIES) {
+      throw new Error("This bundle contains too many files to inspect safely.");
+    }
+    if (
+      names.some(
+        (name) =>
+          name.startsWith("/") ||
+          name.split("/").some((segment) => segment === ".."),
+      )
+    ) {
+      throw new Error("This bundle contains an unsafe file path.");
+    }
     const entry = zip.file("project.json");
     if (!entry) throw new Error("This bundle does not contain project.json.");
     raw = await entry.async("string");
     const manifestEntry = zip.file("manifest.json");
-    if (manifestEntry) {
-      const manifest = JSON.parse(await manifestEntry.async("string")) as {
-        projectSha256?: string;
-      };
-      if (manifest.projectSha256 && (await sha256(raw)) !== manifest.projectSha256) {
-        throw new Error("Bundle integrity check failed.");
-      }
+    if (!manifestEntry) {
+      throw new Error("This bundle does not contain a verification manifest.");
+    }
+    const manifest = JSON.parse(await manifestEntry.async("string")) as {
+      format?: string;
+      formatVersion?: string;
+      projectId?: string;
+      projectSha256?: string;
+    };
+    if (
+      manifest.format !== "resea-project" ||
+      manifest.formatVersion !== "1.0.0" ||
+      !manifest.projectId ||
+      !manifest.projectSha256
+    ) {
+      throw new Error("This bundle has an incompatible verification manifest.");
+    }
+    manifestProjectId = manifest.projectId;
+    if ((await sha256(raw)) !== manifest.projectSha256) {
+      throw new Error("Bundle integrity check failed.");
     }
   } else {
     raw = await file.text();
+  }
+  if (raw.length > MAX_PROJECT_JSON_CHARACTERS) {
+    throw new Error("This project exceeds the 100 MB JSON limit.");
   }
   const parsed = JSON.parse(raw) as Partial<ProjectState>;
   if (
     parsed.schemaVersion !== "1.0.0" ||
     !parsed.id ||
     !parsed.spec ||
+    typeof parsed.spec.title !== "string" ||
+    !Array.isArray(parsed.assumptions) ||
+    !parsed.researchPlan ||
     !Array.isArray(parsed.sources) ||
-    !Array.isArray(parsed.outcomes)
+    !Array.isArray(parsed.evidence) ||
+    !Array.isArray(parsed.claims) ||
+    !Array.isArray(parsed.concepts) ||
+    !Array.isArray(parsed.outcomes) ||
+    !Array.isArray(parsed.modules) ||
+    !Array.isArray(parsed.versions) ||
+    !Array.isArray(parsed.events)
   ) {
     throw new Error("This is not a compatible Resea 1.0 project.");
+  }
+  if (manifestProjectId && parsed.id !== manifestProjectId) {
+    throw new Error("The bundle manifest does not match its project.");
   }
   return parsed as ProjectState;
 }

@@ -6,6 +6,25 @@ export function cloneSample(): ProjectState {
   return structuredClone(sampleProject);
 }
 
+export function createSampleProject(): ProjectState {
+  const next = cloneSample();
+  const createdAt = isoNow();
+  next.id = uid("project");
+  next.createdAt = createdAt;
+  next.updatedAt = createdAt;
+  next.backupAt = undefined;
+  next.versions = [];
+  next.events = [
+    {
+      id: uid("event"),
+      at: createdAt,
+      action: "Sample course loaded",
+      detail: "Created a new browser-local working copy of the packaged sample.",
+    },
+  ];
+  return next;
+}
+
 export function createBlankProject(): ProjectState {
   const createdAt = isoNow();
   const id = uid("project");
