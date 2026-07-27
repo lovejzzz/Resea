@@ -1,0 +1,17 @@
+{
+  "name": "Resea — Serious research for serious teaching",
+  "short_name": "Resea",
+  "description": "An evidence-first, browser-local workbench for defensible college course design.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f8f5",
+  "theme_color": "#1e5a48",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
